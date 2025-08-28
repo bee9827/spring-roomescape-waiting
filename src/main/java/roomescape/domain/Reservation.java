@@ -1,18 +1,29 @@
 package roomescape.domain;
 
-import jakarta.persistence.*;
+import static lombok.AccessLevel.PROTECTED;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.FutureOrPresent;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import roomescape.common.exception.RestApiException;
 import roomescape.common.exception.status.ReservationErrorStatus;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-
-import static lombok.AccessLevel.PROTECTED;
 
 
 @Entity
@@ -21,10 +32,9 @@ import static lombok.AccessLevel.PROTECTED;
                 @UniqueConstraint(
                         name = "RESERVATION_DUPLICATE",
                         columnNames = {
-                                "member_id",
                                 "theme_id",
                                 "date",
-                                "time_slot_id",
+                                "time_slot_id"
                         })
         }
 )
@@ -36,35 +46,38 @@ public class Reservation {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "memeber_id")
     private Member member;
-
-    @FutureOrPresent
-    private LocalDate date;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    private TimeSlot timeSlot;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "theme_id")
     private Theme theme;
 
-    @Enumerated(EnumType.STRING)
-    private ReservationStatus status;
+    @FutureOrPresent
+    @Column(name = "date")
+    private LocalDate date;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "time_slot_id")
+    private TimeSlot timeSlot;
+
+    @OneToMany(mappedBy = "reservation", fetch = FetchType.LAZY)
+    private List<WaitingReservation> waitingReservations;
+
+    private ReservationStatus reservationStatus;
 
     @Builder
     public Reservation(Member member, LocalDate date, TimeSlot timeSlot, Theme theme) {
         validatePast(date, timeSlot.getStartAt());
-        this.member = member;
+
         this.date = date;
         this.timeSlot = timeSlot;
         this.theme = theme;
+        this.member = member;
+        reservationStatus = ReservationStatus.BOOKED;
     }
 
-    public void updateStatus(ReservationStatus status) {
-        this.status = status;
-    }
-
-    public void validatePast(LocalDate date, LocalTime time) throws RestApiException {
+    private void validatePast(LocalDate date, LocalTime time) throws RestApiException {
         if (date == null || time == null) {
             throw new RestApiException(ReservationErrorStatus.INVALID_DATE_TIME);
         }
@@ -74,4 +87,44 @@ public class Reservation {
         }
     }
 
+    public void waiting(Member member) {
+        if (waitingReservations == null) {
+            waitingReservations = new ArrayList<>();
+        }
+        waitingReservations.add(new WaitingReservation(member, this));
+    }
+
+    public void cancelBooked() {
+        if (waitingReservations == null || waitingReservations.isEmpty()) {
+            return;
+        }
+        WaitingReservation waitingReservation = getFirstWaiting();
+        promoteWaiting(waitingReservation);
+    }
+
+    public void cancelWaiting(WaitingReservation waitingReservation) {
+        validateWaitingReservationExists(waitingReservation);
+        waitingReservations.remove(waitingReservation);
+    }
+
+    private WaitingReservation getFirstWaiting() {
+        return waitingReservations.stream()
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void promoteWaiting(WaitingReservation waitingReservation) {
+        validateWaitingReservationExists(waitingReservation);
+        this.member = waitingReservation.getMember();
+
+        cancelWaiting(waitingReservation);
+    }
+
+    private void validateWaitingReservationExists(WaitingReservation waitingReservation) {
+        if (!this.waitingReservations.contains(waitingReservation)) {
+            throw new IllegalStateException("잘못된 호출입니다. waitingReservation이 존재하지 않습니다.");
+        }
+    }
 }
+
+

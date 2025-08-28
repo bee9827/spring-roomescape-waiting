@@ -1,11 +1,16 @@
 package roomescape.service;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import roomescape.common.exception.RestApiException;
 import roomescape.common.exception.status.ReservationErrorStatus;
 import roomescape.controller.dto.request.ReservationSearchCriteria;
-import roomescape.domain.*;
+import roomescape.domain.Member;
+import roomescape.domain.Reservation;
+import roomescape.domain.Theme;
+import roomescape.domain.TimeSlot;
 import roomescape.repository.MemberRepository;
 import roomescape.repository.ReservationRepository;
 import roomescape.repository.ThemeRepository;
@@ -13,29 +18,71 @@ import roomescape.repository.TimeSlotRepository;
 import roomescape.service.dto.command.ReservationCreateCommand;
 import roomescape.service.dto.result.ReservationResult;
 
-import java.util.List;
-
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final TimeSlotRepository timeSlotRepository;
     private final ThemeRepository themeRepository;
     private final MemberRepository memberRepository;
 
+    @Transactional
     public ReservationResult save(ReservationCreateCommand reservationCreateCommand) {
         Reservation createRequest = createReservation(reservationCreateCommand);
+        if (checkDuplicated(createRequest)) {
+            return waiting(reservationCreateCommand);
+        }
 
-        return ReservationResult.from(save(createRequest));
+        reservationRepository.save(createRequest);
+        return ReservationResult.fromBookedReservation(createRequest);
+    }
+
+    // TODO: WaitingService에서 진행 ㅠㅠ
+//    private ReservationResult waiting(ReservationCreateCommand reservationCreateCommand) {
+//        Member member = memberRepository.findById(reservationCreateCommand.memberId())
+//                .orElseThrow(() -> new RestApiException(ReservationErrorStatus.MEMBER_NOT_FOUND));
+//        TimeSlot timeSlot = timeSlotRepository.findById(reservationCreateCommand.timeSlotId())
+//                .orElseThrow(() -> new RestApiException(ReservationErrorStatus.TIME_SLOT_NOT_FOUND));
+//        Theme theme = themeRepository.findById(reservationCreateCommand.themeId())
+//                .orElseThrow(() -> new RestApiException(ReservationErrorStatus.THEME_NOT_FOUND));
+//
+//        Reservation reservation = reservationRepository.findByThemeAndTimeSlotAndDate(theme, timeSlot,
+//                reservationCreateCommand.date());
+//        validateReservation(reservation);
+//
+//        reservation.waiting(member);
+//        reservationRepository.save(reservation);
+//        
+//        return ReservationResult.fromWaitingReservation(reservation, member);
+//    }
+
+    public boolean checkDuplicated(Reservation reservation) {
+        return reservationRepository.existsByDateAndThemeAndTimeSlot(reservation.getDate(), reservation.getTheme(),
+                reservation.getTimeSlot());
+    }
+
+    private void validateReservation(Reservation reservation) {
+        if (reservation == null) {
+            throw new RestApiException(ReservationErrorStatus.NOT_FOUND);
+        }
+    }
+
+    private void validateDuplicated(Reservation createRequest) {
+        if (reservationRepository.isDuplicated(createRequest.getTheme(), createRequest.getDate(),
+                createRequest.getTimeSlot())) {
+            throw new RestApiException(ReservationErrorStatus.DUPLICATE);
+        }
     }
 
     public List<ReservationResult> findAll() {
         return reservationRepository.findAll()
                 .stream()
-                .map(ReservationResult::from)
+                .map(ReservationResult::fromBookedReservation)
                 .toList();
     }
 
+    @Transactional
     public void deleteById(Long id) {
         Reservation reservation = getById(id);
         reservationRepository.delete(reservation);
@@ -44,13 +91,13 @@ public class ReservationService {
     public List<ReservationResult> searchByCriteria(ReservationSearchCriteria reservationSearchCriteria) {
         return filter(reservationSearchCriteria)
                 .stream()
-                .map(ReservationResult::from)
+                .map(ReservationResult::fromBookedReservation)
                 .toList();
     }
 
     public ReservationResult findById(Long id) {
         Reservation reservation = getById(id);
-        return ReservationResult.from(reservation);
+        return ReservationResult.fromBookedReservation(reservation);
     }
 
     private Reservation createReservation(ReservationCreateCommand reservationCreateCommand) {
@@ -61,14 +108,7 @@ public class ReservationService {
         Theme theme = themeRepository.findById(reservationCreateCommand.themeId())
                 .orElseThrow(() -> new RestApiException(ReservationErrorStatus.THEME_NOT_FOUND));
 
-        Reservation createRequest = reservationCreateCommand.toEntity(member, theme, timeSlot);
-
-        if (bookedReservationExists(createRequest))
-            createRequest.updateStatus(ReservationStatus.WAITING);
-        else
-            createRequest.updateStatus(ReservationStatus.BOOKED);
-
-        return createRequest;
+        return reservationCreateCommand.toEntity(member, theme, timeSlot);
     }
 
     private List<Reservation> filter(ReservationSearchCriteria filter) {
@@ -80,28 +120,8 @@ public class ReservationService {
         );
     }
 
-    private Reservation save(Reservation reservation) {
-        validate(reservation);
-
-        return reservationRepository.save(reservation);
-    }
-
-    private boolean bookedReservationExists(Reservation createRequest) {
-        return reservationRepository.existsByDateAndThemeAndTimeSlot(
-                createRequest.getDate(), createRequest.getTheme(), createRequest.getTimeSlot());
-    }
-
     private Reservation getById(Long id) {
         return reservationRepository.findById(id)
                 .orElseThrow(() -> new RestApiException(ReservationErrorStatus.NOT_FOUND));
-    }
-
-    private void validate(Reservation reservation) {
-        if (checkDuplicate(reservation))
-            throw new RestApiException(ReservationErrorStatus.DUPLICATE);
-    }
-
-    private boolean checkDuplicate(Reservation createRequest) {
-        return reservationRepository.isDuplicated(createRequest.getMember(), createRequest.getTheme(), createRequest.getDate(), createRequest.getTimeSlot());
     }
 }
