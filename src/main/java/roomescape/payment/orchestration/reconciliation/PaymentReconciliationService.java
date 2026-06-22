@@ -1,13 +1,13 @@
-package roomescape.payment.service;
+package roomescape.payment.orchestration.reconciliation;
 
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import roomescape.common.exception.BusinessRuleViolationException;
 import roomescape.common.exception.EntityNotFoundException;
-import roomescape.order.Order;
-import roomescape.order.OrderService;
-import roomescape.order.OrderStatus;
+import roomescape.payment.order.Order;
+import roomescape.payment.order.OrderService;
+import roomescape.payment.order.OrderStatus;
 import roomescape.payment.PaymentApprovalStatus;
 import roomescape.payment.PaymentGateway;
 import roomescape.reservation.service.ReservationService;

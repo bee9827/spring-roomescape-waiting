@@ -12,6 +12,7 @@ import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.mock.http.client.MockClientHttpResponse;
 import roomescape.common.ratelimit.TokenBucketRateLimiter;
 import roomescape.payment.exception.OutboundRateLimitException;
+import roomescape.payment.toss.config.OutboundRateLimitInterceptor;
 
 /**
  * 나가는 호출 Rate Limit 인터셉터가 토큰 유무에 따라 실제 전송을 진행/차단하는지 검증한다.

@@ -1,4 +1,4 @@
-package roomescape.payment.service;
+package roomescape.payment.orchestration;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -6,9 +6,9 @@ import roomescape.auth.service.ReservationAuthorizationService;
 import roomescape.common.exception.BusinessRuleViolationException;
 import roomescape.common.exception.EntityNotFoundException;
 import roomescape.member.Member;
-import roomescape.order.Order;
-import roomescape.order.OrderService;
-import roomescape.order.OrderStatus;
+import roomescape.payment.order.Order;
+import roomescape.payment.order.OrderService;
+import roomescape.payment.order.OrderStatus;
 import roomescape.payment.ConfirmOutcome;
 import roomescape.payment.PaymentConfirmation;
 import roomescape.payment.PaymentGateway;

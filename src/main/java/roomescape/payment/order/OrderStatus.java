@@ -1,4 +1,4 @@
-package roomescape.order;
+package roomescape.payment.order;
 
 public enum OrderStatus {
     PENDING,

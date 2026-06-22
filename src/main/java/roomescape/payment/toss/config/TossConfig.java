@@ -1,4 +1,4 @@
-package roomescape.payment.toss;
+package roomescape.payment.toss.config;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -13,6 +13,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import roomescape.common.ratelimit.TokenBucketRateLimiter;
+import roomescape.payment.toss.BackoffSleeper;
+import roomescape.payment.toss.OutboundRateLimitProperties;
+import roomescape.payment.toss.TossProperties;
 
 /**
  * 토스 연동 설정. 토스용 RestClient를 여기서 조립한다 — base-url과 서버 승인용 Basic 인증 헤더를

@@ -1,4 +1,4 @@
-package roomescape.order.dao;
+package roomescape.payment.order.dao;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,9 +9,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.stereotype.Repository;
-import roomescape.order.Order;
-import roomescape.order.OrderDao;
-import roomescape.order.OrderStatus;
+import roomescape.payment.order.Order;
+import roomescape.payment.order.OrderDao;
+import roomescape.payment.order.OrderStatus;
 
 @Repository
 public class OrderJdbcDao implements OrderDao {

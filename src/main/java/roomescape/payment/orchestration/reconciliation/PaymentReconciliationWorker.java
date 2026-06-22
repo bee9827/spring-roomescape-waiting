@@ -1,10 +1,9 @@
-package roomescape.worker;
+package roomescape.payment.orchestration.reconciliation;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import roomescape.payment.service.PaymentReconciliationService;
 
 /**
  * 결과 불명확(NEEDS_CHECK) 주문 자동 수렴 스케줄러. 사용자가 재시도하지 않아도, 주기적으로 깨어나

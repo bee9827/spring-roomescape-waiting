@@ -1,10 +1,9 @@
-package roomescape.worker;
+package roomescape.payment.orchestration.refund;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import roomescape.payment.service.PaymentRefundService;
 
 /**
  * 환불(보상) 자동 처리 스케줄러. 결제는 됐지만 예약 확정에 실패한(NEEDS_REFUND) 주문을 주기적으로 주워

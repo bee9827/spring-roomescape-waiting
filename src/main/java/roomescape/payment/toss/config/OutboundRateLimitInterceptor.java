@@ -1,4 +1,4 @@
-package roomescape.payment.toss;
+package roomescape.payment.toss.config;
 
 import java.io.IOException;
 import org.springframework.http.HttpRequest;

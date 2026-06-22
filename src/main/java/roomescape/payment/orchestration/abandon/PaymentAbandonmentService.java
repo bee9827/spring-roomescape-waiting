@@ -1,4 +1,4 @@
-package roomescape.payment.service;
+package roomescape.payment.orchestration.abandon;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -6,8 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import roomescape.auth.service.ReservationAuthorizationService;
 import roomescape.member.Member;
-import roomescape.order.Order;
-import roomescape.order.OrderService;
+import roomescape.payment.order.Order;
+import roomescape.payment.order.OrderService;
 import roomescape.reservation.service.ReservationService;
 
 /**

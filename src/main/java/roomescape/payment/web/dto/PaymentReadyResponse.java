@@ -1,6 +1,6 @@
 package roomescape.payment.web.dto;
 
-import roomescape.order.Order;
+import roomescape.payment.order.Order;
 import roomescape.reservation.Reservation;
 
 /**

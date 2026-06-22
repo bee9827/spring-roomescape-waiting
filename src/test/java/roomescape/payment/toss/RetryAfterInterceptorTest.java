@@ -17,6 +17,7 @@ import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import roomescape.payment.toss.config.RetryAfterInterceptor;
 
 /**
  * 토스 429 백오프 재시도 인터셉터를 가짜 HTTP 서버(MockWebServer)로 검증한다.

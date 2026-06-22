@@ -1,6 +1,6 @@
 package roomescape.payment.web.dto;
 
-import roomescape.order.Order;
+import roomescape.payment.order.Order;
 
 /**
  * 내 결제/주문 내역 한 건. 예약과 reservationId로 묶어 프론트가 예약 정보와 합쳐 보여준다.

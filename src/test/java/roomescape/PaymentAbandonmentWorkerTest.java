@@ -17,10 +17,10 @@ import org.springframework.test.context.ActiveProfiles;
 import roomescape.common.vo.Name;
 import roomescape.member.Member;
 import roomescape.member.MemberDao;
-import roomescape.order.Order;
-import roomescape.order.OrderDao;
-import roomescape.order.OrderService;
-import roomescape.order.OrderStatus;
+import roomescape.payment.order.Order;
+import roomescape.payment.order.OrderDao;
+import roomescape.payment.order.OrderService;
+import roomescape.payment.order.OrderStatus;
 import roomescape.promotion.OutboxStatus;
 import roomescape.promotion.PromotionOutboxDao;
 import roomescape.reservation.Reservation;
@@ -33,14 +33,14 @@ import roomescape.theme.Theme;
 import roomescape.theme.ThemeDao;
 import roomescape.time.Time;
 import roomescape.time.TimeDao;
-import roomescape.worker.ExpiredOrderWorker;
+import roomescape.payment.orchestration.abandon.PaymentAbandonmentWorker;
 
 @SpringBootTest(properties = "scheduling.enabled=false")
 @ActiveProfiles("test")
-class ExpiredOrderWorkerTest {
+class PaymentAbandonmentWorkerTest {
 
     @Autowired
-    private ExpiredOrderWorker worker;
+    private PaymentAbandonmentWorker worker;
     @Autowired
     private ReservationService reservationService;
     @Autowired

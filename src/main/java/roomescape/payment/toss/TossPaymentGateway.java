@@ -18,6 +18,7 @@ import roomescape.payment.PaymentGateway;
 import roomescape.payment.exception.PaymentGatewayUnreachableException;
 import roomescape.payment.PaymentResult;
 import roomescape.payment.exception.PaymentResultUnknownException;
+import roomescape.payment.toss.config.TossConfig;
 import roomescape.payment.toss.dto.TossCancelRequest;
 import roomescape.payment.toss.dto.TossConfirmRequest;
 import roomescape.payment.toss.dto.TossErrorResponse;

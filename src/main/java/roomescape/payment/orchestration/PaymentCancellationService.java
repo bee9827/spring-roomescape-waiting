@@ -1,9 +1,9 @@
-package roomescape.payment.service;
+package roomescape.payment.orchestration;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import roomescape.member.Member;
-import roomescape.order.OrderService;
+import roomescape.payment.order.OrderService;
 import roomescape.reservation.service.ReservationService;
 
 /**

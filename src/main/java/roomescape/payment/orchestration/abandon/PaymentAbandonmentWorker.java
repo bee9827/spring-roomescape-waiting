@@ -1,4 +1,4 @@
-package roomescape.worker;
+package roomescape.payment.orchestration.abandon;
 
 import java.time.LocalDateTime;
 import org.slf4j.Logger;
@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import roomescape.payment.service.PaymentAbandonmentService;
 import roomescape.reservation.service.ReservationService;
 
 /**
@@ -20,16 +19,16 @@ import roomescape.reservation.service.ReservationService;
  * 나이를 보므로, 주기와 무관하게 갓 만든 PENDING(결제 진행 중)은 절대 건드리지 않는다.
  */
 @Component
-public class ExpiredOrderWorker {
+public class PaymentAbandonmentWorker {
 
-    private static final Logger log = LoggerFactory.getLogger(ExpiredOrderWorker.class);
+    private static final Logger log = LoggerFactory.getLogger(PaymentAbandonmentWorker.class);
 
     private final PaymentAbandonmentService abandonmentService;
     private final ReservationService reservationService;
     private final long ttlMinutes;
 
-    public ExpiredOrderWorker(PaymentAbandonmentService abandonmentService, ReservationService reservationService,
-                              @Value("${payment.expiry.ttl-minutes:30}") long ttlMinutes) {
+    public PaymentAbandonmentWorker(PaymentAbandonmentService abandonmentService, ReservationService reservationService,
+                                    @Value("${payment.expiry.ttl-minutes:30}") long ttlMinutes) {
         this.abandonmentService = abandonmentService;
         this.reservationService = reservationService;
         this.ttlMinutes = ttlMinutes;

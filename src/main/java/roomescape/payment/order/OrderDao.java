@@ -1,4 +1,4 @@
-package roomescape.order;
+package roomescape.payment.order;
 
 import java.time.LocalDateTime;
 import java.util.List;
