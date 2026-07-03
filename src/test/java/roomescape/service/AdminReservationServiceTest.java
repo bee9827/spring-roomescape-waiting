@@ -47,7 +47,7 @@ import roomescape.waiting.WaitingDao;
 import roomescape.waiting.WaitingService;
 import roomescape.waiting.dao.WaitingJdbcDao;
 import roomescape.waiting.web.dto.WaitingRequestDto;
-import roomescape.worker.PromotionOutboxWorker;
+import roomescape.promotion.worker.PromotionOutboxWorker;
 
 @JdbcTest
 @Import({AdminReservationService.class, ReservationCreator.class, WaitingService.class, ReservationJdbcDao.class, TimeJdbcDao.class,

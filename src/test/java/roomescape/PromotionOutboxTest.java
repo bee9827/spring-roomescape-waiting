@@ -30,7 +30,7 @@ import roomescape.time.Time;
 import roomescape.time.TimeDao;
 import roomescape.waiting.WaitingService;
 import roomescape.waiting.web.dto.WaitingRequestDto;
-import roomescape.worker.PromotionOutboxWorker;
+import roomescape.promotion.worker.PromotionOutboxWorker;
 
 @SpringBootTest(properties = "scheduling.enabled=false")
 @ActiveProfiles("test")
