@@ -51,8 +51,10 @@ rate-limit:
   capacity: ${RATE_LIMIT_CAPACITY:100}
   refill-per-sec: ${RATE_LIMIT_REFILL_PER_SEC:50}
 
-# 나가는 토스 호출 Rate Limit(클라이언트 관점). 한도를 넘는 호출은 외부로 보내지 않고 자체 거부한다.
-# 들어오는 쪽과 같은 토큰 버킷 알고리즘을, 한도만 분리해 적용한다.
+# 나가는 토스 호출 Rate Limit(클라이언트 관점). 토큰이 없으면 max-wait까지 기다렸다 보내고(호출자가 내부
+# 워커·결제 스레드로 유계라 잠깐 붙잡는 게 거부→재시도 왕복보다 싸다), 그래도 안 차면 외부로 보내지 않고 거부한다.
+# 들어오는 쪽(즉시 거부)과 같은 토큰 버킷 알고리즘을, 한도와 거부 정책만 달리 적용한다.
 outbound-rate-limit:
   capacity: ${OUTBOUND_RATE_LIMIT_CAPACITY:50}
   refill-per-sec: ${OUTBOUND_RATE_LIMIT_REFILL_PER_SEC:20}
+  max-wait: ${OUTBOUND_RATE_LIMIT_MAX_WAIT:2s}

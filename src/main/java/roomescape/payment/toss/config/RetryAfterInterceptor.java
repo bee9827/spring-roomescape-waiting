@@ -8,7 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
-import roomescape.payment.toss.BackoffSleeper;
+import roomescape.common.ratelimit.BackoffSleeper;
 
 /**
  * 토스의 429(Too Many Requests)를 가로채 Retry-After만큼 백오프 후 재시도하는 아웃바운드 인터셉터(클라이언트 관점).

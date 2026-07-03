@@ -2,6 +2,9 @@ package roomescape.common.ratelimit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -12,7 +15,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * 토큰 버킷을 가짜 시계(LongSupplier)로 결정적으로 검증한다. 실제 시간을 기다리지 않고 시계를 직접 전진시켜
- * 보충·상한·재시도 안내·동시성을 확인한다.
+ * 보충·상한·재시도 안내·동시성을 확인한다. 대기 버전(tryConsume(maxWait))은 실제로 자는 대신
+ * 가짜 시계를 전진시키는 sleeper를 주입해, 잔 시간까지 결정적으로 확인한다.
  */
 class TokenBucketRateLimiterTest {
 
@@ -51,6 +55,42 @@ class TokenBucketRateLimiterTest {
         assertThat(limiter.tryConsume()).isTrue();
         assertThat(limiter.tryConsume()).isTrue();
         assertThat(limiter.tryConsume()).isFalse();
+    }
+
+    @Test
+    void 대기_버전은_토큰이_있으면_자지_않고_즉시_소비한다() {
+        AtomicLong clock = new AtomicLong(0);
+        List<Long> sleeps = new ArrayList<>();
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 1, clock::get, sleeps::add);
+
+        assertThat(limiter.tryConsume(Duration.ofSeconds(1))).isTrue();
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    void 대기_버전은_마감_안에_차면_그만큼_잤다가_소비한다() {
+        AtomicLong clock = new AtomicLong(0);
+        List<Long> sleeps = new ArrayList<>();
+        // 자는 대신 가짜 시계를 잔 만큼 전진시킨다 → 깨어나면 토큰이 차 있는 상황을 시간 없이 재현.
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 2, clock::get, millis -> {
+            sleeps.add(millis);
+            clock.addAndGet(millis * 1_000_000L);
+        }); // 초당 2개 → 1개당 0.5초
+        limiter.tryConsume(); // 비움
+
+        assertThat(limiter.tryConsume(Duration.ofSeconds(1))).isTrue();
+        assertThat(sleeps).containsExactly(500L); // 딱 필요한 만큼만 잤다
+    }
+
+    @Test
+    void 대기_버전은_마감_안에_찰_수_없으면_자지_않고_즉시_거부한다() {
+        AtomicLong clock = new AtomicLong(0);
+        List<Long> sleeps = new ArrayList<>();
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 1, clock::get, sleeps::add); // 1개당 1초
+        limiter.tryConsume(); // 비움
+
+        assertThat(limiter.tryConsume(Duration.ofMillis(500))).isFalse(); // 1초 필요 > 상한 0.5초
+        assertThat(sleeps).isEmpty(); // 어차피 실패할 대기는 하지 않는다
     }
 
     @Test

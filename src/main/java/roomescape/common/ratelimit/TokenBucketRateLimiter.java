@@ -1,10 +1,12 @@
 package roomescape.common.ratelimit;
 
+import java.time.Duration;
 import java.util.function.LongSupplier;
 
 /**
  * 토큰 버킷 Rate Limiter. capacity만큼 토큰이 차 있고 매초 refillPerSec개씩 보충된다. 요청은 토큰 1개를
  * 소비하고(tryConsume), 없으면 거부된다. 들어오는/나가는 두 방향에서 같은 알고리즘으로 재사용한다(방향만 다름).
+ * 거부 정책은 호출자가 고른다 — 즉시 거부(tryConsume())와 상한 내 대기(tryConsume(maxWait)) 두 가지를 제공한다.
  *
  * <p>보충은 폴링이 아니라 '마지막 보충 이후 경과 시간 × refillPerSec'로 그때그때 계산하며(lazy refill),
  * capacity를 넘지 않는다. 시간은 System.nanoTime을 직접 박지 않고 LongSupplier로 주입받아, 가짜 시계로
@@ -15,14 +17,22 @@ public class TokenBucketRateLimiter {
     private static final double ONE_TOKEN = 1.0;
     private static final double NANOS_PER_SECOND = 1_000_000_000.0;
 
+    private static final double NANOS_PER_MILLI = 1_000_000.0;
+
     private final long capacity;
     private final double refillPerSec;
     private final LongSupplier nanoClock;
+    private final BackoffSleeper sleeper;
 
     private double tokens;
     private long lastRefillNanos;
 
     public TokenBucketRateLimiter(long capacity, double refillPerSec, LongSupplier nanoClock) {
+        this(capacity, refillPerSec, nanoClock, BackoffSleeper.realTime());
+    }
+
+    /** sleeper 주입용 — 테스트는 실제로 자지 않고 가짜 시계를 전진시키는 sleeper로 대기 흐름을 결정적으로 검증한다. */
+    public TokenBucketRateLimiter(long capacity, double refillPerSec, LongSupplier nanoClock, BackoffSleeper sleeper) {
         if (capacity <= 0) {
             throw new IllegalArgumentException("버킷 용량은 1 이상이어야 합니다.");
         }
@@ -32,9 +42,13 @@ public class TokenBucketRateLimiter {
         if (nanoClock == null) {
             throw new IllegalArgumentException("시계는 비어 있을 수 없습니다.");
         }
+        if (sleeper == null) {
+            throw new IllegalArgumentException("sleeper는 비어 있을 수 없습니다.");
+        }
         this.capacity = capacity;
         this.refillPerSec = refillPerSec;
         this.nanoClock = nanoClock;
+        this.sleeper = sleeper;
         this.tokens = capacity; // 시작은 가득 — 초기 버스트(capacity)까지 허용한다.
         this.lastRefillNanos = nanoClock.getAsLong();
     }
@@ -49,13 +63,46 @@ public class TokenBucketRateLimiter {
         return false;
     }
 
-    /** 토큰 1개가 찰 때까지 필요한 초를 올림(ceil)으로 반환한다. 이미 1개 이상이면 0. */
+    /**
+     * 토큰이 없으면 최대 maxWait까지 기다렸다가 소비한다(java.util.concurrent의 tryAcquire(timeout) 관례 —
+     * 기다리긴 하지만 실패할 수 있으니 여전히 try). 마감 안에 찰 수 없으면 기다리지 않고 즉시 거부(false)한다 —
+     * 어차피 실패할 대기로 스레드를 붙잡아 두지 않는다.
+     *
+     * <p>잠은 락 밖에서 잔다 — 락을 쥔 채 자면 그동안 아무도 토큰을 확인할 수 없다. 그래서 깨어난 사이
+     * 다른 스레드가 토큰을 채갔을 수 있고, 루프를 돌며 마감까지 재확인한다.
+     */
+    public boolean tryConsume(Duration maxWait) {
+        long deadlineNanos = nanoClock.getAsLong() + maxWait.toNanos();
+        while (true) {
+            long sleepMillis;
+            synchronized (this) {
+                refill();
+                if (tokens >= ONE_TOKEN) {
+                    tokens -= ONE_TOKEN;
+                    return true;
+                }
+                long neededNanos = nanosUntilNextToken();
+                if (nanoClock.getAsLong() + neededNanos > deadlineNanos) {
+                    return false;
+                }
+                sleepMillis = (long) Math.ceil(neededNanos / NANOS_PER_MILLI);
+            }
+            sleeper.sleep(sleepMillis);
+        }
+    }
+
+    /** 토큰 1개가 찰 때까지 필요한 초를 올림(ceil)으로 반환한다(Retry-After 헤더용). 이미 1개 이상이면 0. */
     public synchronized long retryAfterSeconds() {
         refill();
+        return (long) Math.ceil(nanosUntilNextToken() / NANOS_PER_SECOND);
+    }
+
+    /** 토큰 1개가 찰 때까지 필요한 나노초. 이미 1개 이상이면 0. refill() 후, 락을 쥔 채 호출해야 한다. */
+    private long nanosUntilNextToken() {
         if (tokens >= ONE_TOKEN) {
             return 0L;
         }
-        return (long) Math.ceil((ONE_TOKEN - tokens) / refillPerSec);
+        return (long) Math.ceil((ONE_TOKEN - tokens) / refillPerSec * NANOS_PER_SECOND);
     }
 
     private void refill() {

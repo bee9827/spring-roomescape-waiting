@@ -12,15 +12,15 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import roomescape.common.ratelimit.BackoffSleeper;
 import roomescape.common.ratelimit.TokenBucketRateLimiter;
-import roomescape.payment.toss.BackoffSleeper;
 import roomescape.payment.toss.OutboundRateLimitProperties;
 import roomescape.payment.toss.TossProperties;
 
 /**
  * 토스 연동 설정. 토스용 RestClient를 여기서 조립한다 — base-url과 서버 승인용 Basic 인증 헤더를
  * 기본값으로 박아, 어댑터(TossPaymentGateway)는 '어느 경로에 무엇을 보낼지'만 알면 되게 한다.
- * 나가는 호출엔 인터셉터 두 겹을 건다 — 바깥은 한도 검사(OutboundRateLimitInterceptor),
+ * 나가는 호출엔 인터셉터 두 겹을 건다 — 바깥은 한도 검사(OutboundRateLimitInterceptor, 상한 내 대기 후 거부),
  * 안쪽은 429 백오프 재시도(RetryAfterInterceptor)다.
  */
 @Configuration
@@ -31,7 +31,7 @@ public class TossConfig {
     public OutboundRateLimitInterceptor outboundRateLimitInterceptor(OutboundRateLimitProperties properties) {
         TokenBucketRateLimiter rateLimiter = new TokenBucketRateLimiter(
                 properties.capacity(), properties.refillPerSec(), System::nanoTime);
-        return new OutboundRateLimitInterceptor(rateLimiter);
+        return new OutboundRateLimitInterceptor(rateLimiter, properties.maxWait());
     }
 
     @Bean
