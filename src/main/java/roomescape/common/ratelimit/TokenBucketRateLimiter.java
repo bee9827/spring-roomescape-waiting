@@ -20,8 +20,6 @@ public class TokenBucketRateLimiter {
 
     private static final double NANOS_PER_SECOND = 1_000_000_000.0;
     private static final double NANOS_PER_MILLI = 1_000_000.0;
-    // 소수 refillPerSec(예: 0.5/s)를 정수 토큰으로 보존하기 위한 환산 창(1000초당 N개).
-    private static final long REFILL_WINDOW_SECONDS = 1000L;
 
     private final Bucket bucket;
     private final BlockingStrategy blockingStrategy;
@@ -32,6 +30,12 @@ public class TokenBucketRateLimiter {
 
     /** sleeper 주입용 — 테스트는 실제로 자지 않고 가짜 시계를 전진시키는 sleeper로 대기 흐름을 결정적으로 검증한다. */
     public TokenBucketRateLimiter(long capacity, double refillPerSec, LongSupplier nanoClock, BackoffSleeper sleeper) {
+        validate(capacity, refillPerSec, nanoClock, sleeper);
+        this.bucket = buildBucket(capacity, refillPerSec, nanoClock);
+        this.blockingStrategy = toBlockingStrategy(sleeper);
+    }
+
+    private static void validate(long capacity, double refillPerSec, LongSupplier nanoClock, BackoffSleeper sleeper) {
         if (capacity <= 0) {
             throw new IllegalArgumentException("버킷 용량은 1 이상이어야 합니다.");
         }
@@ -44,25 +48,43 @@ public class TokenBucketRateLimiter {
         if (sleeper == null) {
             throw new IllegalArgumentException("sleeper는 비어 있을 수 없습니다.");
         }
-        long refillTokens = Math.round(refillPerSec * REFILL_WINDOW_SECONDS);
-        this.bucket = Bucket.builder()
-                .addLimit(Bandwidth.builder()
-                        .capacity(capacity)
-                        .refillGreedy(refillTokens, Duration.ofSeconds(REFILL_WINDOW_SECONDS))
-                        .build())
-                .withCustomTimePrecision(new TimeMeter() {
-                    @Override
-                    public long currentTimeNanos() {
-                        return nanoClock.getAsLong();
-                    }
+    }
 
-                    @Override
-                    public boolean isWallClockBased() {
-                        return false;
-                    }
-                })
+    private static Bucket buildBucket(long capacity, double refillPerSec, LongSupplier nanoClock) {
+        return Bucket.builder()
+                .addLimit(bandwidth(capacity, refillPerSec))
+                .withCustomTimePrecision(nanoTimeMeter(nanoClock))
                 .build();
-        this.blockingStrategy = nanosToPark -> sleeper.sleep((long) Math.ceil(nanosToPark / NANOS_PER_MILLI));
+    }
+
+    /** 소수 refillPerSec(예: 0.5/s)를 정수 토큰/기간(1000초당 N개)으로 환산한다 — greedy는 기간에 균등 분배라 동작 동일. */
+    private static Bandwidth bandwidth(long capacity, double refillPerSec) {
+        long windowSeconds = 1000L;
+        long refillTokens = Math.round(refillPerSec * windowSeconds);
+        return Bandwidth.builder()
+                .capacity(capacity)
+                .refillGreedy(refillTokens, Duration.ofSeconds(windowSeconds))
+                .build();
+    }
+
+    /** 주입받은 시계를 Bucket4j의 시계로 번역한다 — 가짜 시계일 수 있으니 벽시계 아님으로 선언. */
+    private static TimeMeter nanoTimeMeter(LongSupplier nanoClock) {
+        return new TimeMeter() {
+            @Override
+            public long currentTimeNanos() {
+                return nanoClock.getAsLong();
+            }
+
+            @Override
+            public boolean isWallClockBased() {
+                return false;
+            }
+        };
+    }
+
+    /** 주입받은 sleeper(ms)를 Bucket4j의 대기 전략(ns)으로 번역한다. */
+    private static BlockingStrategy toBlockingStrategy(BackoffSleeper sleeper) {
+        return nanosToPark -> sleeper.sleep((long) Math.ceil(nanosToPark / NANOS_PER_MILLI));
     }
 
     /** 토큰이 1개 이상이면 1개 소비하고 통과(true), 없으면 거부(false). */
