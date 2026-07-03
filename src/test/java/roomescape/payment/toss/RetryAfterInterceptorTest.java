@@ -40,7 +40,7 @@ class RetryAfterInterceptorTest {
 
     @Test
     void Retry_After를_받으면_그만큼_대기_후_재시도해_최종_200을_받는다() {
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         server.enqueue(new MockResponse().setResponseCode(429).setHeader("Retry-After", "2"));
         server.enqueue(new MockResponse().setResponseCode(200).setBody("ok"));
         RestClient client = clientWith(new RetryAfterInterceptor(3, 1000, sleeps::add));
@@ -49,24 +49,24 @@ class RetryAfterInterceptorTest {
 
         assertThat(body).isEqualTo("ok");
         assertThat(server.getRequestCount()).isEqualTo(2);
-        assertThat(sleeps).containsExactly(2000L); // Retry-After 2초를 존중
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(2)); // Retry-After 2초를 존중
     }
 
     @Test
     void Retry_After가_없으면_기본_백오프로_폴백해_재시도한다() {
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         server.enqueue(new MockResponse().setResponseCode(429));
         server.enqueue(new MockResponse().setResponseCode(200).setBody("ok"));
         RestClient client = clientWith(new RetryAfterInterceptor(3, 1000, sleeps::add));
 
         client.get().uri("/x").retrieve().body(String.class);
 
-        assertThat(sleeps).containsExactly(1000L);
+        assertThat(sleeps).containsExactly(Duration.ofMillis(1000));
     }
 
     @Test
     void maxAttempts를_넘어도_429면_마지막_429를_그대로_돌려준다() {
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         server.enqueue(new MockResponse().setResponseCode(429).setHeader("Retry-After", "1"));
         server.enqueue(new MockResponse().setResponseCode(429).setHeader("Retry-After", "1"));
         RestClient client = clientWith(new RetryAfterInterceptor(2, 1000, sleeps::add));
@@ -79,7 +79,7 @@ class RetryAfterInterceptorTest {
 
         assertThat(status.value()).isEqualTo(429);
         assertThat(server.getRequestCount()).isEqualTo(2); // 최초 1 + 재시도 1 = maxAttempts
-        assertThat(sleeps).containsExactly(1000L); // 재시도 1회만 대기
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(1)); // 재시도 1회만 대기
     }
 
     private RestClient clientWith(RetryAfterInterceptor interceptor) {

@@ -43,13 +43,13 @@ class OutboundRateLimitInterceptorTest {
     @Test
     void 토큰이_없어도_상한_안에_차면_기다렸다가_전송한다() throws IOException {
         AtomicLong clock = new AtomicLong(0);
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         AtomicInteger executed = new AtomicInteger();
         // 자는 대신 가짜 시계를 전진시키는 sleeper — 대기 후 성공 경로를 실제 시간 없이 재현.
         OutboundRateLimitInterceptor interceptor = new OutboundRateLimitInterceptor(
-                new TokenBucketRateLimiter(1, 1, clock::get, millis -> {
-                    sleeps.add(millis);
-                    clock.addAndGet(millis * 1_000_000L);
+                new TokenBucketRateLimiter(1, 1, clock::get, duration -> {
+                    sleeps.add(duration);
+                    clock.addAndGet(duration.toNanos());
                 }), Duration.ofSeconds(2));
         // 유일한 토큰을 첫 호출이 소비한다.
         interceptor.intercept(new MockClientHttpRequest(), new byte[0],
@@ -62,7 +62,7 @@ class OutboundRateLimitInterceptorTest {
                 });
 
         assertThat(executed.get()).isEqualTo(1); // 거부되지 않고
-        assertThat(sleeps).containsExactly(1000L); // 토큰이 찰 때까지(1초) 기다렸다 전송했다
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(1)); // 토큰이 찰 때까지 기다렸다 전송했다
     }
 
     @Test

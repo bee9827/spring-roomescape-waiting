@@ -60,7 +60,7 @@ class TokenBucketRateLimiterTest {
     @Test
     void 대기_버전은_토큰이_있으면_자지_않고_즉시_소비한다() {
         AtomicLong clock = new AtomicLong(0);
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 1, clock::get, sleeps::add);
 
         assertThat(limiter.tryConsume(Duration.ofSeconds(1))).isTrue();
@@ -70,22 +70,22 @@ class TokenBucketRateLimiterTest {
     @Test
     void 대기_버전은_마감_안에_차면_그만큼_잤다가_소비한다() {
         AtomicLong clock = new AtomicLong(0);
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         // 자는 대신 가짜 시계를 잔 만큼 전진시킨다 → 깨어나면 토큰이 차 있는 상황을 시간 없이 재현.
-        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 2, clock::get, millis -> {
-            sleeps.add(millis);
-            clock.addAndGet(millis * 1_000_000L);
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 2, clock::get, duration -> {
+            sleeps.add(duration);
+            clock.addAndGet(duration.toNanos());
         }); // 초당 2개 → 1개당 0.5초
         limiter.tryConsume(); // 비움
 
         assertThat(limiter.tryConsume(Duration.ofSeconds(1))).isTrue();
-        assertThat(sleeps).containsExactly(500L); // 딱 필요한 만큼만 잤다
+        assertThat(sleeps).containsExactly(Duration.ofMillis(500)); // 딱 필요한 만큼만 잤다
     }
 
     @Test
     void 대기_버전은_마감_안에_찰_수_없으면_자지_않고_즉시_거부한다() {
         AtomicLong clock = new AtomicLong(0);
-        List<Long> sleeps = new ArrayList<>();
+        List<Duration> sleeps = new ArrayList<>();
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(1, 1, clock::get, sleeps::add); // 1개당 1초
         limiter.tryConsume(); // 비움
 

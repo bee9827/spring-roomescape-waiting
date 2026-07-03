@@ -1,6 +1,7 @@
 package roomescape.payment.toss.config;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRequest;
@@ -24,15 +25,13 @@ import roomescape.common.ratelimit.BackoffSleeper;
  */
 public class RetryAfterInterceptor implements ClientHttpRequestInterceptor {
 
-    private static final long MILLIS_PER_SECOND = 1000L;
-
     private final int maxAttempts;
-    private final long defaultBackoffMillis;
+    private final Duration defaultBackoff;
     private final BackoffSleeper sleeper;
 
     public RetryAfterInterceptor(int maxAttempts, long defaultBackoffMillis, BackoffSleeper sleeper) {
         this.maxAttempts = maxAttempts;
-        this.defaultBackoffMillis = defaultBackoffMillis;
+        this.defaultBackoff = Duration.ofMillis(defaultBackoffMillis);
         this.sleeper = sleeper;
     }
 
@@ -42,9 +41,9 @@ public class RetryAfterInterceptor implements ClientHttpRequestInterceptor {
         ClientHttpResponse response = execution.execute(request, body);
         int attempt = 1;
         while (isTooManyRequests(response) && attempt < maxAttempts) {
-            long backoffMillis = retryAfterMillis(response).orElse(defaultBackoffMillis);
+            Duration backoff = retryAfter(response).orElse(defaultBackoff);
             response.close();
-            sleeper.sleep(backoffMillis);
+            sleeper.sleep(backoff);
             response = execution.execute(request, body);
             attempt++;
         }
@@ -55,13 +54,13 @@ public class RetryAfterInterceptor implements ClientHttpRequestInterceptor {
         return response.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value();
     }
 
-    private Optional<Long> retryAfterMillis(ClientHttpResponse response) {
+    private Optional<Duration> retryAfter(ClientHttpResponse response) {
         String retryAfter = response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER);
         if (retryAfter == null || retryAfter.isBlank()) {
             return Optional.empty();
         }
         try {
-            return Optional.of(Long.parseLong(retryAfter.trim()) * MILLIS_PER_SECOND);
+            return Optional.of(Duration.ofSeconds(Long.parseLong(retryAfter.trim())));
         } catch (NumberFormatException e) {
             return Optional.empty(); // 초가 아닌 HTTP-date 형식 등은 기본 백오프로 폴백한다.
         }

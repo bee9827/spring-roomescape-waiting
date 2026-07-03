@@ -19,7 +19,6 @@ import java.util.function.LongSupplier;
 public class TokenBucketRateLimiter {
 
     private static final double NANOS_PER_SECOND = 1_000_000_000.0;
-    private static final double NANOS_PER_MILLI = 1_000_000.0;
 
     private final Bucket bucket;
     private final BlockingStrategy blockingStrategy;
@@ -82,9 +81,9 @@ public class TokenBucketRateLimiter {
         };
     }
 
-    /** 주입받은 sleeper(ms)를 Bucket4j의 대기 전략(ns)으로 번역한다. */
+    /** 주입받은 sleeper를 Bucket4j의 대기 전략으로 번역한다. */
     private static BlockingStrategy toBlockingStrategy(BackoffSleeper sleeper) {
-        return nanosToPark -> sleeper.sleep((long) Math.ceil(nanosToPark / NANOS_PER_MILLI));
+        return nanosToPark -> sleeper.sleep(Duration.ofNanos(nanosToPark));
     }
 
     /** 토큰이 1개 이상이면 1개 소비하고 통과(true), 없으면 거부(false). */
