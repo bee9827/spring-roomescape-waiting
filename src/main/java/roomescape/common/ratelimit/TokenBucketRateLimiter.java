@@ -18,8 +18,6 @@ import java.util.function.LongSupplier;
  */
 public class TokenBucketRateLimiter {
 
-    private static final double NANOS_PER_SECOND = 1_000_000_000.0;
-
     private final Bucket bucket;
     private final BlockingStrategy blockingStrategy;
 
@@ -110,6 +108,11 @@ public class TokenBucketRateLimiter {
         if (probe.canBeConsumed()) {
             return 0L;
         }
-        return (long) Math.ceil(probe.getNanosToWaitForRefill() / NANOS_PER_SECOND);
+        return ceilSeconds(Duration.ofNanos(probe.getNanosToWaitForRefill()));
+    }
+
+    /** 헤더는 정수 초만 허용하므로 올림한다 — 0.5초 남았는데 0을 주면 즉시 재시도를 부른다. */
+    private static long ceilSeconds(Duration duration) {
+        return duration.getNano() == 0 ? duration.getSeconds() : duration.getSeconds() + 1;
     }
 }
