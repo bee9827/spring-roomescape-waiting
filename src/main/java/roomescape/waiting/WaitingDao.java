@@ -10,11 +10,9 @@ public interface WaitingDao extends CommonDao<Waiting> {
 
     Waitings findQueueBySlot(Slot slot);
 
-    Waitings findQueueBySlotForUpdate(Slot slot);
-
     boolean existsBySlotForUpdate(Slot slot);
 
-    Optional<Waiting> findFirstBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId);
+    Optional<Long> findFirstIdBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId);
 
     List<Waitings> findAllQueues();
 

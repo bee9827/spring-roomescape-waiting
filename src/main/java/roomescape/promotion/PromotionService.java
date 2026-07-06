@@ -3,6 +3,7 @@ package roomescape.promotion;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import roomescape.common.vo.Slot;
@@ -53,20 +54,29 @@ public class PromotionService {
     }
 
     /**
-     * 여러 번 실행되어도 결과가 같도록 멱등하게 설계했다:
-     * 이미 해당 슬롯에 활성 예약이 있으면(=이미 승격됨 또는 그새 누가 예약함) 아무것도 하지 않는다.
+     * 여러 번 실행되어도 결과가 같도록 멱등하게 설계했다 — 두 겹:
+     * 사전 검사(무잠금)는 빠른 스킵용 UX일 뿐이고, 경합의 진실은 승격 INSERT의 UNIQUE 백스톱이 가린다.
+     * (빈 슬롯 FOR UPDATE는 gap 락이라 입장을 직렬화하지 못하면서 데드락만 만든다 — log_56과 동일 정리.)
+     * 첫 대기자 행 락은 유지 — 실존 행이라 record 락이 성립하고, 워커끼리·승격↔대기취소를 직렬화한다.
      */
     private void promotePendingSlot(Long themeId, Long timeId, LocalDate date, Long storeId) {
-        if (reservationDao.findBySlotKeyForUpdate(themeId, timeId, date, storeId).isPresent()) {
+        if (reservationDao.existsBySlotKey(themeId, timeId, date, storeId)) {
             return;
         }
-        waitingDao.findFirstBySlotKeyForUpdate(themeId, timeId, date, storeId)
+        waitingDao.findFirstIdBySlotKeyForUpdate(themeId, timeId, date, storeId)
+                .flatMap(waitingDao::findById)
                 .ifPresent(first -> {
                     LocalDateTime now = LocalDateTime.now();
                     if (first.isPast(now)) {
                         return;
                     }
-                    reservationCreator.createFromPromotion(first, now);
+                    try {
+                        reservationCreator.createFromPromotion(first, now);
+                    } catch (DuplicateKeyException e) {
+                        // 그 사이 슬롯이 참(다른 워커의 승격 또는 어드민 직접 예약).
+                        // 대기는 줄을 지키고 임무만 소비한다 — 다음 취소가 새 태스크를 적재하므로 잃는 것이 없다.
+                        return;
+                    }
                     waitingDao.delete(first.getId());
                 });
     }

@@ -25,13 +25,19 @@ public class WaitingService {
     }
 
     public Waiting create(WaitingRequestDto waitingRequestDto, Member member) {
-        // 전제조건: "대기 최대 5명" 보장은 같은 슬롯의 모든 쓰기 경로가 아래 예약 행 락(findBySlotKeyForUpdate)을
-        // 먼저 잡아 직렬화된다는 가정 위에서만 성립한다. 이 앵커를 우회해 큐에 직접 INSERT하는 경로가 생기면 보장이 깨진다.
-        Reservation reservation = reservationDao.findBySlotKeyForUpdate(waitingRequestDto.themeId(),
+        // 전제조건: "대기 최대 5명"은 카운트 제약이라 UNIQUE로 못 내린다 — 대기 수를 늘리는 모든 경로가
+        // 아래 예약 행 락(앵커)을 먼저 잡아 직렬화된다는 가정 위에서만 성립한다(잠글 실존 행이 있어 record 락 성립).
+        // 앵커를 우회해 큐에 직접 INSERT하는 경로가 생기면 보장이 깨진다. 잠금은 id만(JOIN 금지, log_56).
+        // 주의: 이 트랜잭션의 읽기 스냅샷(read view)은 앵커 락 "이후" 첫 일반 SELECT(findById)에서 생성된다.
+        // 그래서 큐 읽기가 선행 앵커 보유자들의 커밋을 전부 본다 — 앵커 락보다 앞에 일반 SELECT를 추가하면 이 보장이 깨진다.
+        Long anchorId = reservationDao.findIdBySlotKeyForUpdate(waitingRequestDto.themeId(),
                         waitingRequestDto.timeId(), waitingRequestDto.date(), waitingRequestDto.storeId())
                 .orElseThrow(() -> new BusinessRuleViolationException("예약이 존재하지 않아 대기가 불가능합니다."));
+        Reservation reservation = reservationDao.findById(anchorId)
+                .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 예약입니다."));
 
-        Waitings waitings = waitingDao.findQueueBySlotForUpdate(reservation.getSlot());
+        // 큐 읽기는 무잠금 스냅샷 — 늘리는 쪽은 앵커가 직렬화하고, 삭제로 인한 낡음은 안전한 방향(과잉 거절)으로만 틀린다.
+        Waitings waitings = waitingDao.findQueueBySlot(reservation.getSlot());
         Waiting ranked = waitings.enqueue(member, reservation, LocalDateTime.now());
         try {
             return waitingDao.insert(ranked);

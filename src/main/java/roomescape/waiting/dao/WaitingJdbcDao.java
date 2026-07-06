@@ -166,16 +166,6 @@ public class WaitingJdbcDao implements WaitingDao {
     }
 
     @Override
-    public Waitings findQueueBySlot(Slot slot) {
-        return findQueueBySlot(slot, "");
-    }
-
-    @Override
-    public Waitings findQueueBySlotForUpdate(Slot slot) {
-        return findQueueBySlot(slot, "FOR UPDATE");
-    }
-
-    @Override
     public boolean existsBySlotForUpdate(Slot slot) {
         // JOIN 없이 waitings만 잠근다. SELECT ... FOR UPDATE는 JOIN으로 딸려 읽힌 행(times 등 공유 참조 행)까지
         // X로 잠가, 대기열만 보려던 검사가 슬롯 밖 트랜잭션과도 부딪히는 데드락 변이 됐었다.
@@ -192,11 +182,12 @@ public class WaitingJdbcDao implements WaitingDao {
         return !jdbcTemplate.queryForList(sql, params, Long.class).isEmpty();
     }
 
-    private Waitings findQueueBySlot(Slot slot, String lockClause) {
+    @Override
+    public Waitings findQueueBySlot(Slot slot) {
         String sql = BASE_SELECT + """
                 WHERE w.date = :date AND w.time_id = :timeId AND w.theme_id = :themeId AND w.store_id = :storeId
                 ORDER BY w.id
-                """ + lockClause;
+                """;
         SqlParameterSource params = new MapSqlParameterSource("date", slot.getDate())
                 .addValue("timeId", slot.getTime().getId())
                 .addValue("themeId", slot.getTheme().getId())
@@ -206,18 +197,20 @@ public class WaitingJdbcDao implements WaitingDao {
     }
 
     @Override
-    public Optional<Waiting> findFirstBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId) {
-        String sql = BASE_SELECT + """
-                WHERE w.date = :date AND w.time_id = :timeId AND w.theme_id = :themeId AND w.store_id = :storeId
-                ORDER BY w.id
-                LIMIT 1
+    public Optional<Long> findFirstIdBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId) {
+        // JOIN 없이 슬롯의 대기 행 전부(도메인 규칙상 최대 5)를 잠그고 min(id)를 고른다(승격↔대기취소·워커끼리 직렬화).
+        // ORDER BY id LIMIT 1을 쓰지 않는 이유: 옵티마이저가 PK 스캔 플랜을 고르면 다른 슬롯 행까지 잠근다
+        // (잠기는 범위는 실행 계획이 정한다). 정렬 유인을 없애 슬롯 인덱스 플랜을 고정. 전체 객체는 findById로 무잠금 로드.
+        String sql = """
+                SELECT id FROM waitings
+                WHERE date = :date AND time_id = :timeId AND theme_id = :themeId AND store_id = :storeId
                 FOR UPDATE
                 """;
         SqlParameterSource params = new MapSqlParameterSource("date", date)
                 .addValue("timeId", timeId)
                 .addValue("themeId", themeId)
                 .addValue("storeId", storeId);
-        return jdbcTemplate.query(sql, params, ROW_MAPPER).stream().findFirst();
+        return jdbcTemplate.query(sql, params, (rs, i) -> rs.getLong("id")).stream().min(Long::compareTo);
     }
 
     @Override

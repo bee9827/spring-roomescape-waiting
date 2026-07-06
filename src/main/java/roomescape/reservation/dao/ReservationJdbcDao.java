@@ -221,6 +221,31 @@ public class ReservationJdbcDao implements ReservationDao {
 
     @Override
     public boolean existsBySlot(Slot slot) {
+        return existsBySlotKey(slot.getTheme().getId(), slot.getTime().getId(), slot.getDate(), slot.getStoreId());
+    }
+
+    @Override
+    public Optional<Long> findIdBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId) {
+        // JOIN 없이 예약 행 하나만 잠근다(앵커). 전체 객체가 필요하면 잠근 뒤 findById로 무잠금 로드 —
+        // FOR UPDATE에 JOIN이 붙으면 딸려 읽힌 공유 참조 행(times 등)까지 잠겨 데드락 변이 된다(log_56).
+        String sql = """
+                SELECT id FROM reservations
+                WHERE theme_id = :themeId AND time_id = :timeId AND date = :date
+                AND store_id = :storeId
+                AND deleted_at = :sentinel
+                FOR UPDATE
+                """;
+        SqlParameterSource params = new MapSqlParameterSource()
+                .addValue("themeId", themeId)
+                .addValue("timeId", timeId)
+                .addValue("date", date)
+                .addValue("storeId", storeId)
+                .addValue("sentinel", SENTINEL);
+        return jdbcTemplate.query(sql, params, (rs, i) -> rs.getLong("id")).stream().findFirst();
+    }
+
+    @Override
+    public boolean existsBySlotKey(Long themeId, Long timeId, LocalDate date, Long storeId) {
         // FOR UPDATE 금지: 빈 슬롯에 걸면 gap 락이 되는데, gap끼리는 서로 안 막아 직렬화가 안 되면서
         // 서로의 INSERT(insert intention)만 막아 데드락을 만든다. 경합의 진실은 UNIQUE 백스톱이 가린다.
         String sql = """
@@ -230,30 +255,12 @@ public class ReservationJdbcDao implements ReservationDao {
                 AND deleted_at = :sentinel
                 """;
         SqlParameterSource params = new MapSqlParameterSource()
-                .addValue("themeId", slot.getTheme().getId())
-                .addValue("timeId", slot.getTime().getId())
-                .addValue("date", slot.getDate())
-                .addValue("storeId", slot.getStoreId())
-                .addValue("sentinel", SENTINEL);
-        return !jdbcTemplate.queryForList(sql, params, Long.class).isEmpty();
-    }
-
-    @Override
-    public Optional<Reservation> findBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId) {
-        String sql = BASE_SELECT + """
-                WHERE r.theme_id = :themeId AND r.time_id = :timeId AND r.date = :date
-                AND r.store_id = :storeId
-                AND r.deleted_at = :sentinel
-                FOR UPDATE
-                """;
-
-        SqlParameterSource params = new MapSqlParameterSource()
                 .addValue("themeId", themeId)
                 .addValue("timeId", timeId)
                 .addValue("date", date)
                 .addValue("storeId", storeId)
                 .addValue("sentinel", SENTINEL);
-        return jdbcTemplate.query(sql, params, ROW_MAPPER).stream().findFirst();
+        return !jdbcTemplate.queryForList(sql, params, Long.class).isEmpty();
     }
 
     @Override
