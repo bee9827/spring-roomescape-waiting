@@ -22,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import roomescape.common.exception.BusinessRuleViolationException;
 import roomescape.common.exception.DuplicateEntityException;
 import roomescape.common.vo.Name;
 import roomescape.member.Member;
@@ -39,6 +40,8 @@ import roomescape.theme.Theme;
 import roomescape.theme.ThemeDao;
 import roomescape.time.Time;
 import roomescape.time.TimeDao;
+import roomescape.waiting.WaitingService;
+import roomescape.waiting.web.dto.WaitingRequestDto;
 
 /**
  * 진짜 경합 증명 — H2 단일 트랜잭션으론 메커니즘만 증명됐던 것을 MySQL + 동시 스레드로 닫는다.
@@ -56,6 +59,8 @@ class MySqlConcurrencyProofTest {
 
     @Autowired
     private ReservationService reservationService;
+    @Autowired
+    private WaitingService waitingService;
     @Autowired
     private ReservationDao reservationDao;
     @Autowired
@@ -156,6 +161,55 @@ class MySqlConcurrencyProofTest {
         // H2에서는 >= 1로 물러섰던 단언 — MySQL(gap lock)에서는 정확히 1을 보장해야 한다.
         assertThat(successCount.get()).isEqualTo(1);
         assertThat(conflictCount.get()).isEqualTo(threadCount - 1);
+    }
+
+    @Test
+    @DisplayName("MySQL 진짜 경합: 10명이 동시에 같은 슬롯에 대기 신청하면 정확히 5명만 성공한다(카운트 불변식은 앵커 락이 지킨다)")
+    void concurrentEnqueueRespectsMaxWaitingCount() throws Exception {
+        Reservation reservation = reservationDao.insert(
+                Reservation.createByAdmin(member, LocalDate.now().plusDays(1), time, theme, store));
+        WaitingRequestDto request = new WaitingRequestDto(
+                reservation.getDate(), time.getId(), theme.getId(), store.getId());
+
+        int threadCount = 10;
+        List<Member> members = new ArrayList<>();
+        for (int i = 0; i < threadCount; i++) {
+            jdbcTemplate.update(
+                    "INSERT INTO members(name, email, password, role) VALUES (?, ?, ?, ?)",
+                    "대기자" + i, "waiter" + i + "@test.com", "password", "USER");
+            members.add(memberDao.findByEmail("waiter" + i + "@test.com").orElseThrow());
+        }
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger rejectedCount = new AtomicInteger(0);
+        List<String> unexpected = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+
+        for (Member waiter : members) {
+            new Thread(() -> {
+                try {
+                    startLatch.await();
+                    waitingService.create(request, waiter);
+                    successCount.incrementAndGet();
+                } catch (BusinessRuleViolationException e) {
+                    rejectedCount.incrementAndGet();
+                } catch (Exception e) {
+                    unexpected.add(e.getClass().getSimpleName() + ": " + e.getMessage());
+                } finally {
+                    doneLatch.countDown();
+                }
+            }).start();
+        }
+
+        startLatch.countDown();
+        assertThat(doneLatch.await(60, TimeUnit.SECONDS)).as("스레드가 60초 내에 끝나야 한다(락 대기 교착 의심)").isTrue();
+
+        assertThat(unexpected).isEmpty();
+        assertThat(successCount.get()).isEqualTo(5);
+        assertThat(rejectedCount.get()).isEqualTo(threadCount - 5);
+        Long stored = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM waitings", Long.class);
+        assertThat(stored).isEqualTo(5);
     }
 
     @Test
