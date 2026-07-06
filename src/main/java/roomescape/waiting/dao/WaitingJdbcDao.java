@@ -175,6 +175,23 @@ public class WaitingJdbcDao implements WaitingDao {
         return findQueueBySlot(slot, "FOR UPDATE");
     }
 
+    @Override
+    public boolean existsBySlotForUpdate(Slot slot) {
+        // JOIN 없이 waitings만 잠근다. SELECT ... FOR UPDATE는 JOIN으로 딸려 읽힌 행(times 등 공유 참조 행)까지
+        // X로 잠가, 대기열만 보려던 검사가 슬롯 밖 트랜잭션과도 부딪히는 데드락 변이 됐었다.
+        String sql = """
+                SELECT id FROM waitings
+                WHERE date = :date AND time_id = :timeId AND theme_id = :themeId AND store_id = :storeId
+                LIMIT 1
+                FOR UPDATE
+                """;
+        SqlParameterSource params = new MapSqlParameterSource("date", slot.getDate())
+                .addValue("timeId", slot.getTime().getId())
+                .addValue("themeId", slot.getTheme().getId())
+                .addValue("storeId", slot.getStoreId());
+        return !jdbcTemplate.queryForList(sql, params, Long.class).isEmpty();
+    }
+
     private Waitings findQueueBySlot(Slot slot, String lockClause) {
         String sql = BASE_SELECT + """
                 WHERE w.date = :date AND w.time_id = :timeId AND w.theme_id = :themeId AND w.store_id = :storeId

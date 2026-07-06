@@ -115,9 +115,10 @@ class ReservationConcurrencyTest {
         startLatch.countDown();
         doneLatch.await();
 
-        // H2는 gap lock 미지원으로 엄격한 검증 불가. MySQL 환경에서 successCount=1 보장.
-        assertThat(successCount.get()).isGreaterThanOrEqualTo(1);
-        assertThat(successCount.get() + conflictCount.get()).isEqualTo(threadCount);
+        // 직렬화 주체가 gap 락(H2 미지원)에서 UNIQUE 백스톱으로 바뀌어 H2에서도 정확히 1을 보장한다.
+        // 진짜 경합 증명은 MySqlConcurrencyProofTest가 담당.
+        assertThat(successCount.get()).isEqualTo(1);
+        assertThat(conflictCount.get()).isEqualTo(threadCount - 1);
     }
 
     @Test

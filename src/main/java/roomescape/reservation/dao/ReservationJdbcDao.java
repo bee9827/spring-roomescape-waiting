@@ -220,13 +220,14 @@ public class ReservationJdbcDao implements ReservationDao {
     }
 
     @Override
-    public boolean existsBySlotForUpdate(Slot slot) {
+    public boolean existsBySlot(Slot slot) {
+        // FOR UPDATE 금지: 빈 슬롯에 걸면 gap 락이 되는데, gap끼리는 서로 안 막아 직렬화가 안 되면서
+        // 서로의 INSERT(insert intention)만 막아 데드락을 만든다. 경합의 진실은 UNIQUE 백스톱이 가린다.
         String sql = """
                 SELECT id FROM reservations
                 WHERE theme_id = :themeId AND time_id = :timeId AND date = :date
                 AND store_id = :storeId
                 AND deleted_at = :sentinel
-                FOR UPDATE
                 """;
         SqlParameterSource params = new MapSqlParameterSource()
                 .addValue("themeId", slot.getTheme().getId())

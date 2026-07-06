@@ -17,7 +17,7 @@ public interface ReservationDao extends CommonDao<Reservation> {
 
     long count();
 
-    boolean existsBySlotForUpdate(Slot slot);
+    boolean existsBySlot(Slot slot);
 
     Optional<Reservation> findBySlotKeyForUpdate(Long themeId, Long timeId, LocalDate date, Long storeId);
 
