@@ -55,7 +55,8 @@ CREATE TABLE reservations
     theme_id   BIGINT      NOT NULL,
     store_id   BIGINT      NOT NULL,
     status     VARCHAR(20) NOT NULL DEFAULT 'BOOKED',
-    deleted_at TIMESTAMP   NOT NULL DEFAULT '9999-12-31 00:00:00',
+    -- MySQL TIMESTAMP는 32비트 유닉스 초(~2038)라 9999 센티널을 못 담는다 → 달력 값을 그대로 저장하는 DATETIME
+    deleted_at DATETIME    NOT NULL DEFAULT '9999-12-31 00:00:00',
     version    BIGINT      NOT NULL DEFAULT 0,
     created_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
