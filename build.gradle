@@ -41,6 +41,12 @@ dependencies {
     testImplementation 'io.rest-assured:rest-assured:5.5.1'
     testImplementation 'io.rest-assured:spring-mock-mvc'
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+
+    // 진짜 경합 증명: H2는 gap lock 미지원이라 새치기 가드·상태 CAS를 MySQL 컨테이너 위에서 검증
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mysql'
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
 }
 
 test {
