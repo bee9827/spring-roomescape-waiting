@@ -98,7 +98,10 @@ CREATE TABLE waitings
     FOREIGN KEY (time_id) REFERENCES times (id),
     FOREIGN KEY (theme_id) REFERENCES themes (id),
     FOREIGN KEY (store_id) REFERENCES stores (id),
-    UNIQUE (member_id, date, time_id, theme_id, store_id)
+    -- 슬롯 선두 순서: 잠금 조회(WHERE date,time,theme,store)가 인덱스를 타야 gap 락이 그 슬롯의 틈에만 앉는다
+    -- (member_id 선두면 leftmost prefix가 안 맞아 풀스캔 = 전 슬롯 대기 신청 블락).
+    -- member 단독 조회(내 대기 목록)는 인덱스를 잃지만, 슬롯당 5개 제한으로 테이블이 항상 작아 수용.
+    UNIQUE (date, time_id, theme_id, store_id, member_id)
 );
 
 CREATE TABLE promotion_outbox
