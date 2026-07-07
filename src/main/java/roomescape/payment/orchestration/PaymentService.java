@@ -66,6 +66,10 @@ public class PaymentService {
                 .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 주문입니다."));
         authorizationService.validateMemberCanAccess(member, order.getReservationId());
         order.validateAmount(amount);
+        if (order.isConfirmed()) {
+            return ConfirmOutcome.CONFIRMED; // 성공 페이지 재호출(새로고침 등) — 승인 호출 없이 멱등하게 답한다
+        }
+        order.validateConfirmable(); // 실패·격리(DEAD)된 주문은 돈이 나가기 전에 거절(부활 금지)
         return approve(order, paymentKey);
     }
 
@@ -102,7 +106,27 @@ public class PaymentService {
         if (orderService.complete(order, result.paymentKey())) {
             return secureReservationOrScheduleRefund(order);
         }
-        return ConfirmOutcome.CONFIRMED;
+        return resolveLostConfirm(order.getOrderId());
+    }
+
+    /**
+     * CAS 패배 처리 — 상대가 무엇으로 수렴시켰는지 추측하지 않고 실제 상태를 다시 읽는다(조회로 진실).
+     * CONFIRMED면 같은 승인이 이미 반영된 것이라 그대로 참말. 아니면(만료 FAILED·격리 DEAD 등) 방금
+     * 승인된 돈을 아는 워커가 없으므로 NEEDS_REFUND로 전이시켜(보상 경첩) 환불 워커의 시야에 올린다.
+     */
+    private ConfirmOutcome resolveLostConfirm(String orderId) {
+        Order actual = orderService.findByOrderId(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 주문입니다."));
+        if (actual.isConfirmed()) {
+            return ConfirmOutcome.CONFIRMED;
+        }
+        if (orderService.markNeedsRefund(actual)) {
+            return ConfirmOutcome.NEEDS_REFUND;
+        }
+        // 그 사이 또 다른 수렴이 이김(희귀) — 마지막으로 한 번 더 진실을 읽어 판정한다.
+        Order latest = orderService.findByOrderId(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 주문입니다."));
+        return latest.isConfirmed() ? ConfirmOutcome.CONFIRMED : ConfirmOutcome.NEEDS_REFUND;
     }
 
     /**

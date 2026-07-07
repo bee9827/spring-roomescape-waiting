@@ -25,9 +25,14 @@ public class FakePaymentGateway implements PaymentGateway {
     private PaymentApprovalStatus reconcileStatus = PaymentApprovalStatus.NOT_APPROVED;
     /** cancel(환불)로 취소된 paymentKey 기록 — 환불이 실제로 호출됐는지 검증한다. */
     private final List<String> canceledPaymentKeys = new ArrayList<>();
+    /** 승인 성공 직전에 실행되는 훅 — "승인(토스)과 기록(우리 DB) 사이 δ"에 끼어드는 경합을 흉내 낸다. */
+    private Runnable onConfirmSuccess;
+    /** confirm이 실제로 호출된 횟수 — 진입 가드가 "돈이 나가기 전에" 막았는지 검증한다. */
+    private int confirmCallCount = 0;
 
     @Override
     public PaymentResult confirm(PaymentConfirmation confirmation) {
+        confirmCallCount++;
         String paymentKey = confirmation.paymentKey();
         if (READ_TIMEOUT_KEY.equals(paymentKey)) {
             throw new PaymentResultUnknownException("결제 결과를 확인하지 못했습니다.", null);
@@ -35,12 +40,23 @@ public class FakePaymentGateway implements PaymentGateway {
         if (CONNECT_FAIL_KEY.equals(paymentKey)) {
             throw new PaymentGatewayUnreachableException("결제 서버에 연결하지 못했습니다.", null);
         }
+        if (onConfirmSuccess != null) {
+            onConfirmSuccess.run();
+        }
         return new PaymentResult(
                 paymentKey,
                 confirmation.orderId(),
                 "DONE",
                 confirmation.amount()
         );
+    }
+
+    public void setOnConfirmSuccess(Runnable onConfirmSuccess) {
+        this.onConfirmSuccess = onConfirmSuccess;
+    }
+
+    public int confirmCallCount() {
+        return confirmCallCount;
     }
 
     @Override
@@ -56,6 +72,8 @@ public class FakePaymentGateway implements PaymentGateway {
     public void reset() {
         this.reconcileStatus = PaymentApprovalStatus.NOT_APPROVED;
         this.canceledPaymentKeys.clear();
+        this.onConfirmSuccess = null;
+        this.confirmCallCount = 0;
     }
 
     @Override

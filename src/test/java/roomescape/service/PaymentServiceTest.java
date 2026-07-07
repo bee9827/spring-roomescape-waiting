@@ -16,6 +16,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import roomescape.auth.service.ReservationAuthorizationService;
+import roomescape.common.exception.BusinessRuleViolationException;
 import roomescape.common.exception.PaymentAmountMismatchException;
 import roomescape.common.vo.Name;
 import roomescape.fixture.FakePaymentGateway;
@@ -29,7 +30,7 @@ import roomescape.payment.order.OrderStatus;
 import roomescape.payment.order.dao.OrderJdbcDao;
 import roomescape.payment.ConfirmOutcome;
 import roomescape.payment.PaymentApprovalStatus;
-import roomescape.payment.orchestration.abandon.PaymentAbandonmentService;
+import roomescape.payment.order.abandon.PaymentAbandonmentService;
 import roomescape.payment.orchestration.PaymentCancellationService;
 import roomescape.payment.exception.PaymentGatewayUnreachableException;
 import roomescape.payment.exception.PaymentResultUnknownException;
@@ -310,6 +311,51 @@ class PaymentServiceTest {
                 .isEqualTo(OrderStatus.FAILED);
         assertThat(reservationDao.findById(created.reservation().getId()).orElseThrow().getStatus())
                 .isEqualTo(ReservationStatus.CANCELED);
+    }
+
+    @Test
+    @DisplayName("진입 가드: 실패(FAILED)한 주문의 뒤늦은 결제 시도는 승인 호출 전에 거절된다 — 돈이 아예 안 나간다")
+    void confirmRejectsFailedOrderBeforeMoneyMoves() {
+        Created created = createReservationWithOrder();
+        Order loaded = orderService.findByOrderId(created.order().getOrderId()).orElseThrow();
+        orderService.markFailed(loaded); // 만료 워커가 이미 정리한 주문이라 치자
+
+        assertThatThrownBy(() -> paymentService.confirm(member, "pk-late",
+                created.order().getOrderId(), created.order().getAmount()))
+                .isInstanceOf(BusinessRuleViolationException.class);
+        assertThat(fakeGateway.confirmCallCount()).isZero(); // 게이트웨이 호출 자체가 없었다
+    }
+
+    @Test
+    @DisplayName("확정된 주문의 재호출(성공 페이지 새로고침)은 승인 없이 멱등하게 CONFIRMED를 돌려준다")
+    void confirmIsIdempotentForConfirmedOrder() {
+        Created created = createReservationWithOrder();
+        paymentService.confirm(member, "pk-1", created.order().getOrderId(), created.order().getAmount());
+
+        ConfirmOutcome again = paymentService.confirm(member, "pk-1",
+                created.order().getOrderId(), created.order().getAmount());
+
+        assertThat(again).isEqualTo(ConfirmOutcome.CONFIRMED);
+        assertThat(fakeGateway.confirmCallCount()).isEqualTo(1); // 두 번째는 승인 호출 없음
+    }
+
+    @Test
+    @DisplayName("패자 재확인: 승인과 기록 사이(δ)에 만료가 끼어들어 CAS에서 지면, 추측하지 않고 돈을 NEEDS_REFUND로 회수한다")
+    void lostConfirmRecoversOrphanedMoneyAsNeedsRefund() {
+        Created created = createReservationWithOrder();
+        // 승인 성공 직후·기록 직전에 expire 워커가 PENDING→FAILED로 정리하는 경합을 흉내
+        fakeGateway.setOnConfirmSuccess(() -> {
+            Order mid = orderService.findByOrderId(created.order().getOrderId()).orElseThrow();
+            orderService.markFailed(mid);
+        });
+
+        ConfirmOutcome outcome = paymentService.confirm(member, "pk-race",
+                created.order().getOrderId(), created.order().getAmount());
+
+        // 예전 코드는 여기서 CONFIRMED라고 거짓말했다 — 돈은 나갔는데 아무 워커도 모르는 고아가 됐다.
+        assertThat(outcome).isEqualTo(ConfirmOutcome.NEEDS_REFUND);
+        assertThat(orderDao.findByOrderId(created.order().getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.NEEDS_REFUND); // 환불 워커의 시야에 들어옴
     }
 
     @Test
