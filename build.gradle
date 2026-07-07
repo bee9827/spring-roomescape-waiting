@@ -31,6 +31,10 @@ dependencies {
     // 토큰 버킷 Rate Limiter (lock-free: 불변 상태 + AtomicReference CAS). 직접 구현을 대체하는 실험.
     implementation 'com.bucket4j:bucket4j-core:8.10.1'
 
+    // 회복탄력성 툴킷 — @Retry(데드락 패자 재시도)·@CircuitBreaker(외부 장애 차단)를 yml 설정으로.
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
     implementation 'io.jsonwebtoken:jjwt-api:0.11.2'
     implementation 'io.jsonwebtoken:jjwt-impl:0.11.2'
     implementation 'io.jsonwebtoken:jjwt-gson:0.11.2'

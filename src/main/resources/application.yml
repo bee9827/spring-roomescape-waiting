@@ -53,6 +53,19 @@ worker:
   retry:
     max-attempts: ${WORKER_RETRY_MAX_ATTEMPTS:5}
 
+# 데드락 패자 재시도 — 데드락은 박멸이 아니라 관리 대상(InnoDB: "위험이 아니다, 재시도하라").
+# 패자는 transient: 죽는 순간 락 고리가 해체되므로 즉시(wait 0) 재시도가 새 기회를 얻는다.
+# 재시도는 @Transactional 바깥에서 감겨 매 시도가 새 트랜잭션을 받는다(검증 테스트 있음).
+# 재시도 후에도 지면(희귀) PessimisticLockingFailureException이 전파돼 409로 안내한다.
+resilience4j:
+  retry:
+    instances:
+      dbLockRetry:
+        max-attempts: 3
+        wait-duration: 0
+        retry-exceptions:
+          - org.springframework.dao.PessimisticLockingFailureException
+
 # 들어오는 요청 Rate Limit(서버 관점). 결제·예약 엔드포인트 초과분을 컨트롤러 호출 없이 429+Retry-After로 거부한다.
 # capacity: 허용 버스트, refill-per-sec: 평균 초당 처리 상한. 값만 바꾸면 코드 수정 없이 거부 시점이 달라진다.
 rate-limit:

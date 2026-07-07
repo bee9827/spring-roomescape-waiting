@@ -1,5 +1,6 @@
 package roomescape.reservation.service;
 
+import io.github.resilience4j.retry.annotation.Retry;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -67,6 +68,12 @@ public class ReservationService {
                 .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 예약입니다."));
     }
 
+    // 데드락 패자 재시도: INSERT 경로의 데드락은 박멸이 아니라 관리 대상 — 패자는 transient(죽는 순간 락 고리가
+    // 해체됨)라 즉시 재시도가 새 기회를 얻는다. 어스펙트가 @Transactional 바깥에 감겨 매 시도가 새 트랜잭션.
+    // 흔한 결말은 성공 또는 깨끗한 409(승자가 커밋했으면 중복 검사·UNIQUE가 걸러줌).
+    // 전제: 이 메서드가 최외곽 트랜잭션 경계다(컨트롤러가 직접 호출) — 기존 @Transactional 안에서 부르면
+    // 재시도가 죽은(rollback-only) 트랜잭션에 조인해 전부 실패한다.
+    @Retry(name = "dbLockRetry")
     public Reservation create(Member member, ReservationRequestDto request) {
         Reservation reservation = reservationCreator.createByUser(member, request, LocalDateTime.now());
         try {

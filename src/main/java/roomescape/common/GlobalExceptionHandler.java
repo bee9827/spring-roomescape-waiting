@@ -8,6 +8,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -71,6 +72,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(DataIntegrityViolationException e, HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(problem(HttpStatus.CONFLICT, "데이터 충돌", "이미 존재하는 데이터와 충돌이 발생했습니다.", request));
+    }
+
+    /**
+     * 데드락 패자 등 락 경합의 최종 폴백. 패자는 transient라 @Retry(dbLockRetry)가 먼저 재시도하고,
+     * 그래도 지면(희귀) 여기로 온다 — 서버 잘못(500)이 아니라 순간 경합이므로 409 + 재시도 안내.
+     */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleLockContention(PessimisticLockingFailureException e, HttpServletRequest request) {
+        log.warn("락 경합이 재시도 후에도 해소되지 않았습니다.", e);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(problem(HttpStatus.CONFLICT, "일시적 경합", "요청이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.", request));
     }
 
     @ExceptionHandler(RuntimeException.class)

@@ -1,5 +1,6 @@
 package roomescape.waiting;
 
+import io.github.resilience4j.retry.annotation.Retry;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -24,6 +25,8 @@ public class WaitingService {
         this.reservationDao = reservationDao;
     }
 
+    // 데드락 패자 재시도: 앵커 행 락·waitings 삽입이 얽히는 좁은 창의 패자를 즉시 재시도로 회수(transient).
+    @Retry(name = "dbLockRetry")
     public Waiting create(WaitingRequestDto waitingRequestDto, Member member) {
         // 전제조건: "대기 최대 5명"은 카운트 제약이라 UNIQUE로 못 내린다 — 대기 수를 늘리는 모든 경로가
         // 아래 예약 행 락(앵커)을 먼저 잡아 직렬화된다는 가정 위에서만 성립한다(잠글 실존 행이 있어 record 락 성립).
