@@ -67,4 +67,33 @@ public class PromotionOutboxJdbcDao implements PromotionOutboxDao {
                 .addValue("status", OutboxStatus.DONE.name());
         jdbcTemplate.update(sql, params);
     }
+
+    @Override
+    public int incrementAndGetAttempt(Long id) {
+        // PENDING 가드: 증가 직전에 DONE/DEAD로 바뀐 태스크에 유령 실패를 계상하지 않는다.
+        SqlParameterSource params = new MapSqlParameterSource("id", id)
+                .addValue("pending", OutboxStatus.PENDING.name());
+        int updated = jdbcTemplate.update(
+                "UPDATE promotion_outbox SET attempt_count = attempt_count + 1 WHERE id = :id AND status = :pending",
+                params);
+        if (updated == 0) {
+            return 0; // 상태가 이미 바뀜 — 셀 것이 없다
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT attempt_count FROM promotion_outbox WHERE id = :id", params, Integer.class);
+        return count != null ? count : 0;
+    }
+
+    @Override
+    public boolean markDead(Long id) {
+        String sql = """
+                UPDATE promotion_outbox
+                SET status = :dead
+                WHERE id = :id AND status = :pending
+                """;
+        SqlParameterSource params = new MapSqlParameterSource("id", id)
+                .addValue("dead", OutboxStatus.DEAD.name())
+                .addValue("pending", OutboxStatus.PENDING.name());
+        return jdbcTemplate.update(sql, params) == 1;
+    }
 }

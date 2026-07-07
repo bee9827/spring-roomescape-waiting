@@ -34,8 +34,10 @@ public class PromotionOutboxWorker {
         try {
             promotionService.processTask(task);
         } catch (RuntimeException e) {
-            // 일시적 실패: PENDING으로 남겨 다음 주기에 재시도한다. 한 건 실패가 나머지를 막지 않도록 격리한다.
+            // transient(일시적) 가설로 PENDING을 유지해 다음 주기에 재시도하되, 실패를 세어
+            // 한도를 넘기면 가설 기각 → DEAD 격리(무한 재시도 금지). 한 건 실패가 나머지를 막지 않게 건별 격리.
             log.warn("승격 아웃박스 처리 실패 (재시도 예정): taskId={}", task.getId(), e);
+            promotionService.recordFailure(task);
         }
     }
 }

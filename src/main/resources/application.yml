@@ -32,11 +32,13 @@ toss:
     default-backoff-ms: ${TOSS_RETRY_DEFAULT_BACKOFF_MS:1000}
 
 # 결제 미완료(abandonment) 정리 스케줄러.
-# ttl-minutes: 이 시간이 지난 PENDING 주문을 정리(결제창 유효시간보다 길게 — 진행 중 결제 보호).
+# ttl-minutes: 이 시간이 지난 PENDING 주문을 정리. 결제창 유효시간(토스 30분)보다 "확실히" 길게 —
+#   창 마감 직전 승인과 우리 DB 기록 사이의 δ초가 TTL 경계를 밟으면, 돈이 나간 주문을 expire가
+#   FAILED로 덮는 경합이 생긴다(경계가 겹치지 않게 여유를 둔다. 잔여 틈은 confirm의 패자 재확인이 회수).
 # poll-interval-ms: 스케줄러가 얼마나 자주 도는지(TTL과 별개).
 payment:
   expiry:
-    ttl-minutes: ${PAYMENT_EXPIRY_TTL_MINUTES:30}
+    ttl-minutes: ${PAYMENT_EXPIRY_TTL_MINUTES:35}
     poll-interval-ms: ${PAYMENT_EXPIRY_POLL_INTERVAL_MS:60000}
   # 결과 불명확(NEEDS_CHECK) 주문을 토스에 조회해 확정/실패로 자동 수렴(reconciliation).
   reconciliation:
@@ -44,6 +46,12 @@ payment:
   # 결제는 됐는데 예약 확정에 실패한(NEEDS_REFUND) 주문을 토스 취소로 환불(보상)하는 스케줄러.
   refund:
     poll-interval-ms: ${PAYMENT_REFUND_POLL_INTERVAL_MS:60000}
+
+# 워커 공통 재시도 한도 — 메시징 시스템 DLQ의 상태 기계 번역. transient(지나가는 실패) 가설의 유효기간으로,
+# 이 횟수를 연속 실패하면 permanent로 재분류해 DEAD 상태로 격리(폴링 제외·행 보존)하고 사람 개입을 기다린다.
+worker:
+  retry:
+    max-attempts: ${WORKER_RETRY_MAX_ATTEMPTS:5}
 
 # 들어오는 요청 Rate Limit(서버 관점). 결제·예약 엔드포인트 초과분을 컨트롤러 호출 없이 429+Retry-After로 거부한다.
 # capacity: 허용 버스트, refill-per-sec: 평균 초당 처리 상한. 값만 바꾸면 코드 수정 없이 거부 시점이 달라진다.

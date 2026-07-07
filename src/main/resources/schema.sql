@@ -76,6 +76,7 @@ CREATE TABLE orders
     amount          BIGINT       NOT NULL,
     payment_key     VARCHAR(200),
     status          VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+    attempt_count   INT          NOT NULL DEFAULT 0, -- 현재 상태에서의 워커 재시도 횟수. 상태 전이 시 0으로 리셋
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE (order_id),
@@ -106,13 +107,14 @@ CREATE TABLE waitings
 
 CREATE TABLE promotion_outbox
 (
-    id         BIGINT      NOT NULL AUTO_INCREMENT,
-    date       DATE        NOT NULL,
-    time_id    BIGINT      NOT NULL,
-    theme_id   BIGINT      NOT NULL,
-    store_id   BIGINT      NOT NULL,
-    status     VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    created_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id            BIGINT      NOT NULL AUTO_INCREMENT,
+    date          DATE        NOT NULL,
+    time_id       BIGINT      NOT NULL,
+    theme_id      BIGINT      NOT NULL,
+    store_id      BIGINT      NOT NULL,
+    status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    attempt_count INT         NOT NULL DEFAULT 0, -- 워커 재시도 횟수. 한도 초과 시 DEAD로 격리
+    created_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     FOREIGN KEY (time_id) REFERENCES times (id),
     FOREIGN KEY (theme_id) REFERENCES themes (id),

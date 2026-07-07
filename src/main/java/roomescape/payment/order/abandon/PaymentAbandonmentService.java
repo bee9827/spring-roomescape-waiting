@@ -1,4 +1,4 @@
-package roomescape.payment.orchestration.abandon;
+package roomescape.payment.order.abandon;
 
 import java.time.LocalDateTime;
 import java.util.List;

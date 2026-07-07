@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import roomescape.payment.order.OrderRetryEscalator;
 
 /**
  * 결과 불명확(NEEDS_CHECK) 주문 자동 수렴 스케줄러. 사용자가 재시도하지 않아도, 주기적으로 깨어나
@@ -19,9 +20,12 @@ public class PaymentReconciliationWorker {
     private static final Logger log = LoggerFactory.getLogger(PaymentReconciliationWorker.class);
 
     private final PaymentReconciliationService reconciliationService;
+    private final OrderRetryEscalator retryEscalator;
 
-    public PaymentReconciliationWorker(PaymentReconciliationService reconciliationService) {
+    public PaymentReconciliationWorker(PaymentReconciliationService reconciliationService,
+                                       OrderRetryEscalator retryEscalator) {
         this.reconciliationService = reconciliationService;
+        this.retryEscalator = retryEscalator;
     }
 
     @Scheduled(fixedDelayString = "${payment.reconciliation.poll-interval-ms:60000}")
@@ -30,7 +34,9 @@ public class PaymentReconciliationWorker {
             try {
                 reconciliationService.reconcile(orderId);
             } catch (RuntimeException e) {
+                // transient 가설로 다음 주기 재시도하되, 한도를 넘기면 CHECK_DEAD 격리(무한 재시도 금지).
                 log.warn("결제 결과 확인(reconciliation) 실패 (다음 주기 재시도): orderId={}", orderId, e);
+                retryEscalator.recordFailure(orderId);
             }
         }
     }

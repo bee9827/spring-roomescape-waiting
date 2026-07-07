@@ -33,7 +33,7 @@ import roomescape.theme.Theme;
 import roomescape.theme.ThemeDao;
 import roomescape.time.Time;
 import roomescape.time.TimeDao;
-import roomescape.payment.orchestration.abandon.PaymentAbandonmentWorker;
+import roomescape.payment.order.abandon.PaymentAbandonmentWorker;
 
 @SpringBootTest(properties = "scheduling.enabled=false")
 @ActiveProfiles("test")

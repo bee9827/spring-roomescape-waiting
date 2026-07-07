@@ -112,6 +112,23 @@ public class OrderService {
     }
 
     /**
+     * 기대 상태일 때만 워커 실패 횟수를 1 올리고 올린 값을 돌려준다(한도 판정은 호출자 몫).
+     */
+    public int recordFailedAttempt(String orderId, OrderStatus expectedStatus) {
+        return orderDao.incrementAndGetAttempt(orderId, expectedStatus);
+    }
+
+    /**
+     * 재시도 한도 초과 주문을 대응하는 죽은(DEAD) 상태로 격리한다 — 워커 폴링에서 빠지고 행은 보존.
+     * 다른 전이와 같은 CAS 게이트: 그 사이 수렴/격리됐으면 0행 → false(이 격리는 무효).
+     */
+    public boolean escalateToDead(Order order) {
+        OrderStatus expected = order.getStatus();
+        order.escalateToDead();
+        return orderDao.compareAndUpdate(order, expected) == 1;
+    }
+
+    /**
      * 결제 신호 없이 방치된(abandonment) 주문 후보. 기준 시각보다 이전에 생성된 PENDING만.
      */
     @Transactional(readOnly = true)

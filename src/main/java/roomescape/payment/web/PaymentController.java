@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import roomescape.auth.LoginMember;
 import roomescape.member.Member;
 import roomescape.payment.ConfirmOutcome;
-import roomescape.payment.orchestration.abandon.PaymentAbandonmentService;
+import roomescape.payment.order.abandon.PaymentAbandonmentService;
 import roomescape.payment.orchestration.PaymentHistoryService;
 import roomescape.payment.orchestration.PaymentService;
 import roomescape.payment.web.dto.MyOrderResponse;

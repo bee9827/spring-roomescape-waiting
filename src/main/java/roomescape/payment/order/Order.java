@@ -85,6 +85,27 @@ public class Order {
         this.status = OrderStatus.NEEDS_REFUND;
     }
 
+    /**
+     * 결제(승인 호출)를 시작할 수 있는 상태인지 검증한다 — 돈이 움직이기 전의 진입 가드.
+     * PENDING(첫 결제)·NEEDS_CHECK(같은 멱등키 재승인)만 허용. 실패·환불 대기·격리(DEAD)된 주문은
+     * 뒤늦은 성공 콜백이 와도 승인 호출 전에 거절한다 — 죽은 주문에 돈이 나갔다 환불되는 왕복과 부활을 원천 차단.
+     */
+    public void validateConfirmable() {
+        if (status == OrderStatus.PENDING || status == OrderStatus.NEEDS_CHECK) {
+            return;
+        }
+        throw new BusinessRuleViolationException("결제를 진행할 수 없는 주문입니다.");
+    }
+
+    /**
+     * 재시도 한도 초과 — 현재 수렴 중 상태를 대응하는 죽은(DEAD) 상태로 격리한다.
+     * 워커 폴링에서 빠지고 사람 개입을 기다린다. 수렴 중 상태가 아니면 격리 대상이 아니다.
+     */
+    public void escalateToDead() {
+        this.status = status.deadCounterpart()
+                .orElseThrow(() -> new BusinessRuleViolationException("격리할 수 없는 주문 상태입니다: " + status));
+    }
+
     public boolean isConfirmed() {
         return status == OrderStatus.CONFIRMED;
     }

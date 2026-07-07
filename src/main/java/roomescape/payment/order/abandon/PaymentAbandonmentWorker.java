@@ -1,4 +1,4 @@
-package roomescape.payment.orchestration.abandon;
+package roomescape.payment.order.abandon;
 
 import java.time.LocalDateTime;
 import org.slf4j.Logger;
@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import roomescape.payment.order.OrderRetryEscalator;
 import roomescape.reservation.service.ReservationService;
 
 /**
@@ -25,12 +26,15 @@ public class PaymentAbandonmentWorker {
 
     private final PaymentAbandonmentService abandonmentService;
     private final ReservationService reservationService;
+    private final OrderRetryEscalator retryEscalator;
     private final long ttlMinutes;
 
     public PaymentAbandonmentWorker(PaymentAbandonmentService abandonmentService, ReservationService reservationService,
+                                    OrderRetryEscalator retryEscalator,
                                     @Value("${payment.expiry.ttl-minutes:30}") long ttlMinutes) {
         this.abandonmentService = abandonmentService;
         this.reservationService = reservationService;
+        this.retryEscalator = retryEscalator;
         this.ttlMinutes = ttlMinutes;
     }
 
@@ -41,13 +45,17 @@ public class PaymentAbandonmentWorker {
             try {
                 abandonmentService.expire(orderId);
             } catch (RuntimeException e) {
+                // transient 가설로 다음 주기 재시도하되, 한도를 넘기면 EXPIRE_DEAD 격리(무한 재시도 금지).
                 log.warn("결제 만료 정리 실패 (다음 주기 재시도): orderId={}", orderId, e);
+                retryEscalator.recordFailure(orderId);
             }
         }
         for (Long reservationId : reservationService.findExpiredOrphanPendingIds(threshold)) {
             try {
                 reservationService.cancelPending(reservationId);
             } catch (RuntimeException e) {
+                // 주문이 없는(승격 유래) PENDING이라 실패 카운터를 둘 곳이 없다 — DB-로컬 실패뿐이라
+                // transient 가설을 유지하고 다음 주기에 맡긴다(재시도 바운드는 주문 기반 경로만).
                 log.warn("승격 PENDING 만료 정리 실패 (다음 주기 재시도): reservationId={}", reservationId, e);
             }
         }

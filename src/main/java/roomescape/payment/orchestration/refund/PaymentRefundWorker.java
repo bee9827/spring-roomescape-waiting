@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import roomescape.payment.order.OrderRetryEscalator;
 
 /**
  * 환불(보상) 자동 처리 스케줄러. 결제는 됐지만 예약 확정에 실패한(NEEDS_REFUND) 주문을 주기적으로 주워
@@ -17,9 +18,11 @@ public class PaymentRefundWorker {
     private static final Logger log = LoggerFactory.getLogger(PaymentRefundWorker.class);
 
     private final PaymentRefundService refundService;
+    private final OrderRetryEscalator retryEscalator;
 
-    public PaymentRefundWorker(PaymentRefundService refundService) {
+    public PaymentRefundWorker(PaymentRefundService refundService, OrderRetryEscalator retryEscalator) {
         this.refundService = refundService;
+        this.retryEscalator = retryEscalator;
     }
 
     @Scheduled(fixedDelayString = "${payment.refund.poll-interval-ms:60000}")
@@ -28,7 +31,10 @@ public class PaymentRefundWorker {
             try {
                 refundService.refund(orderId);
             } catch (RuntimeException e) {
+                // transient 가설로 다음 주기 재시도하되, 한도를 넘기면 REFUND_DEAD 격리 — 돈이 걸린 격리라
+                // 조용히 죽으면 안 된다(격리 시 ERROR 로그로 사람 호출).
                 log.warn("환불(보상) 처리 실패 (다음 주기 재시도): orderId={}", orderId, e);
+                retryEscalator.recordFailure(orderId);
             }
         }
     }

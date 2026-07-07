@@ -22,6 +22,12 @@ public interface OrderDao {
      */
     int compareAndUpdate(Order order, OrderStatus expectedStatus);
 
+    /**
+     * 기대 상태일 때만 워커 실패 횟수를 1 올리고 올린 값을 돌려준다(상태가 이미 바뀌었으면 0 — 낡은 실패는 안 센다).
+     * 카운터는 상태 전이(update/compareAndUpdate) 때 0으로 리셋된다 — "현재 상태에서 몇 번 실패했나"만 센다.
+     */
+    int incrementAndGetAttempt(String orderId, OrderStatus expectedStatus);
+
     List<Order> findExpiredPending(LocalDateTime threshold);
 
     List<Order> findByReservationIds(List<Long> reservationIds);

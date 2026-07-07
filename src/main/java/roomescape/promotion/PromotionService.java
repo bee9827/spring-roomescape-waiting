@@ -3,6 +3,9 @@ package roomescape.promotion;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,17 +21,23 @@ import roomescape.waiting.WaitingDao;
 @Service
 @Transactional
 public class PromotionService {
+
+    private static final Logger log = LoggerFactory.getLogger(PromotionService.class);
+
     private final PromotionOutboxDao promotionOutboxDao;
     private final WaitingDao waitingDao;
     private final ReservationDao reservationDao;
     private final ReservationCreator reservationCreator;
+    private final int maxRetryAttempts;
 
     public PromotionService(PromotionOutboxDao promotionOutboxDao, WaitingDao waitingDao,
-                            ReservationDao reservationDao, ReservationCreator reservationCreator) {
+                            ReservationDao reservationDao, ReservationCreator reservationCreator,
+                            @Value("${worker.retry.max-attempts:5}") int maxRetryAttempts) {
         this.promotionOutboxDao = promotionOutboxDao;
         this.waitingDao = waitingDao;
         this.reservationDao = reservationDao;
         this.reservationCreator = reservationCreator;
+        this.maxRetryAttempts = maxRetryAttempts;
     }
 
     /**
@@ -51,6 +60,26 @@ public class PromotionService {
     public void processTask(PromotionTask task) {
         promotePendingSlot(task.getThemeId(), task.getTimeId(), task.getDate(), task.getStoreId());
         promotionOutboxDao.markDone(task.getId());
+    }
+
+    /**
+     * 워커 처리 실패 1회를 기록하고, 한도를 넘기면 태스크를 DEAD로 격리한다(DLQ의 상태 기계 번역).
+     * transient 가설이 기각된 것 — 자동 재시도를 멈추고 사람 개입을 기다린다.
+     * 격리된 슬롯은 새 취소가 없는 한 림보가 될 수 있어, 조용히 죽으면 안 된다(ERROR 로그 = 현재의 알림).
+     */
+    public void recordFailure(PromotionTask task) {
+        try {
+            int attempts = promotionOutboxDao.incrementAndGetAttempt(task.getId());
+            if (attempts >= maxRetryAttempts && promotionOutboxDao.markDead(task.getId())) {
+                log.error("승격 재시도 한도({}) 초과 — 태스크를 DEAD로 격리. 슬롯 림보 위험, 사람 개입 필요: "
+                                + "taskId={}, date={}, timeId={}, themeId={}, storeId={}",
+                        maxRetryAttempts, task.getId(), task.getDate(), task.getTimeId(), task.getThemeId(),
+                        task.getStoreId());
+            }
+        } catch (RuntimeException e) {
+            // 기록 자체의 실패가 배치의 나머지 건을 막지 않게 격리 — 못 센 실패는 다음 주기에 다시 센다.
+            log.warn("승격 실패 기록 자체가 실패 — 다음 주기에 다시 센다: taskId={}", task.getId(), e);
+        }
     }
 
     /**

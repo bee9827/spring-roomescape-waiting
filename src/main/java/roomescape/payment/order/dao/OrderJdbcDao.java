@@ -84,9 +84,12 @@ public class OrderJdbcDao implements OrderDao {
 
     @Override
     public Order update(Order order) {
+        // 상태가 "바뀔 때만" 워커 실패 카운터를 리셋한다 — 같은 상태 재기록(recheck의 NEEDS_CHECK→NEEDS_CHECK)이
+        // 카운터를 밀면, 사용자가 재확인을 반복하는 것만으로 재시도 바운드를 영원히 우회할 수 있다.
         String sql = """
                 UPDATE orders
-                SET payment_key = :paymentKey, status = :status
+                SET payment_key = :paymentKey, status = :status,
+                    attempt_count = CASE WHEN status = :status THEN attempt_count ELSE 0 END
                 WHERE order_id = :orderId
                 """;
         SqlParameterSource params = new MapSqlParameterSource()
@@ -123,9 +126,10 @@ public class OrderJdbcDao implements OrderDao {
 
     @Override
     public int compareAndUpdate(Order order, OrderStatus expectedStatus) {
+        // 상태가 바뀌면 워커 실패 카운터는 0부터 다시 — 카운터는 "현재 상태에서의 실패 수"만 센다.
         String sql = """
                 UPDATE orders
-                SET payment_key = :paymentKey, status = :status
+                SET payment_key = :paymentKey, status = :status, attempt_count = 0
                 WHERE order_id = :orderId AND status = :expected
                 """;
         SqlParameterSource params = new MapSqlParameterSource()
@@ -134,6 +138,24 @@ public class OrderJdbcDao implements OrderDao {
                 .addValue("orderId", order.getOrderId())
                 .addValue("expected", expectedStatus.name());
         return jdbcTemplate.update(sql, params);
+    }
+
+    @Override
+    public int incrementAndGetAttempt(String orderId, OrderStatus expectedStatus) {
+        // 상태 가드: 증가 직전에 상태가 전이됐다면 이 실패는 낡은 정보 — 새 상태에 유령 실패를 계상하지 않는다.
+        String update = """
+                UPDATE orders
+                SET attempt_count = attempt_count + 1
+                WHERE order_id = :orderId AND status = :expected
+                """;
+        SqlParameterSource params = new MapSqlParameterSource("orderId", orderId)
+                .addValue("expected", expectedStatus.name());
+        if (jdbcTemplate.update(update, params) == 0) {
+            return 0; // 상태가 이미 바뀜 — 셀 것이 없다(0은 한도에 절대 닿지 않는 값)
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT attempt_count FROM orders WHERE order_id = :orderId", params, Integer.class);
+        return count != null ? count : 0;
     }
 
     @Override
