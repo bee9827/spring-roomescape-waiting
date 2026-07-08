@@ -1,5 +1,6 @@
 package roomescape.payment.orchestration.refund;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,6 +31,11 @@ public class PaymentRefundWorker {
         for (String orderId : refundService.findRefundableOrderIds()) {
             try {
                 refundService.refund(orderId);
+            } catch (CallNotPermittedException e) {
+                // 차단기 열림 = 환경의 실패지 이 주문의 실패가 아니다 — 계상하면 환불 대기 주문들이
+                // 장애 시간만큼 REFUND_DEAD로 오분류된다(돈 걸린 오탐). 이번 주기는 여기서 접는다.
+                log.warn("토스 서킷 브레이커 열림 — 이번 환불 주기 건너뜀");
+                return;
             } catch (RuntimeException e) {
                 // transient 가설로 다음 주기 재시도하되, 한도를 넘기면 REFUND_DEAD 격리 — 돈이 걸린 격리라
                 // 조용히 죽으면 안 된다(격리 시 ERROR 로그로 사람 호출).

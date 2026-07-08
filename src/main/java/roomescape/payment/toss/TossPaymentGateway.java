@@ -1,6 +1,7 @@
 package roomescape.payment.toss;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +43,10 @@ public class TossPaymentGateway implements PaymentGateway {
         this.properties = properties;
     }
 
+    // 서킷 브레이커: 원격 호출 3개(confirm·findStatus·cancel)만 감싼다 — clientKey는 로컬 값이라
+    // 창에 성공으로 계상되면 실패율을 희석한다. 건강의 단위는 메서드가 아니라 토스 전체(인스턴스 하나).
     @Override
+    @CircuitBreaker(name = "toss")
     public PaymentResult confirm(PaymentConfirmation confirmation) {
         TossConfirmRequest request = new TossConfirmRequest(
                 confirmation.paymentKey(), confirmation.orderId(), confirmation.amount());
@@ -70,6 +74,7 @@ public class TossPaymentGateway implements PaymentGateway {
     }
 
     @Override
+    @CircuitBreaker(name = "toss")
     public PaymentApprovalStatus findStatus(String orderId) {
         TossPaymentResponse response;
         try {
@@ -86,6 +91,7 @@ public class TossPaymentGateway implements PaymentGateway {
     }
 
     @Override
+    @CircuitBreaker(name = "toss")
     public void cancel(String paymentKey, String idempotencyKey) {
         try {
             restClient.post()

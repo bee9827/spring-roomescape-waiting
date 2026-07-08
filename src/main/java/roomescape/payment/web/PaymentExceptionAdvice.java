@@ -1,5 +1,6 @@
 package roomescape.payment.web;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.springframework.core.Ordered;
@@ -38,6 +39,20 @@ public class PaymentExceptionAdvice {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                 "결제 요청이 일시적으로 많아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         problem.setTitle("결제 호출 일시 제한");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
+    /**
+     * 서킷 브레이커 열림 — 토스 장애 감지로 호출이 차단된 상태. 돈은 움직이지 않았으니
+     * '결제 실패'가 아니라 '일시 중단 → 잠시 후 재시도'로 안내한다.
+     */
+    @ExceptionHandler(CallNotPermittedException.class)
+    public ResponseEntity<ProblemDetail> handleCircuitOpen(CallNotPermittedException e,
+                                                           HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "결제 서비스가 일시 중단되었습니다. 결제가 진행되지 않았으니 잠시 후 다시 시도해 주세요.");
+        problem.setTitle("결제 일시 중단");
         problem.setInstance(URI.create(request.getRequestURI()));
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
     }

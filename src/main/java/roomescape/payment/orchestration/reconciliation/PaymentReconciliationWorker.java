@@ -1,5 +1,6 @@
 package roomescape.payment.orchestration.reconciliation;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,6 +34,11 @@ public class PaymentReconciliationWorker {
         for (String orderId : reconciliationService.findReconcilableOrderIds()) {
             try {
                 reconciliationService.reconcile(orderId);
+            } catch (CallNotPermittedException e) {
+                // 차단기 열림 = 환경의 실패지 이 주문의 실패가 아니다 — 개별 카운터에 계상하면 멀쩡한 주문들이
+                // 장애 시간만큼 줄줄이 DEAD로 오분류된다. 나머지 건도 즉시 거절될 테니 이번 주기는 여기서 접는다.
+                log.warn("토스 서킷 브레이커 열림 — 이번 reconciliation 주기 건너뜀");
+                return;
             } catch (RuntimeException e) {
                 // transient 가설로 다음 주기 재시도하되, 한도를 넘기면 CHECK_DEAD 격리(무한 재시도 금지).
                 log.warn("결제 결과 확인(reconciliation) 실패 (다음 주기 재시도): orderId={}", orderId, e);

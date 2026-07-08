@@ -57,6 +57,11 @@ class TossPaymentGatewayTest {
         // 타임아웃 테스트를 빠르게 돌리기 위해 짧게 둔다(즉시 응답하는 다른 테스트엔 영향 없음).
         registry.add("toss.connect-timeout", () -> "500ms");
         registry.add("toss.read-timeout", () -> "300ms");
+        // 이 테스트는 의도적 실패(타임아웃·5xx)를 반복한다 — 서킷 브레이커 창에 쌓여 트립되면
+        // 이후 테스트가 CallNotPermitted로 오염되므로, 이 컨텍스트에선 최소 표본을 사실상 도달 불가로 둔다.
+        // 주의: r4j는 COUNT_BASED에서 최소 표본을 창 크기로 자르므로(cap) 창도 같이 키워야 실효가 있다.
+        registry.add("resilience4j.circuitbreaker.instances.toss.sliding-window-size", () -> "10000");
+        registry.add("resilience4j.circuitbreaker.instances.toss.minimum-number-of-calls", () -> "10000");
     }
 
     @AfterAll
