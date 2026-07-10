@@ -9,7 +9,7 @@ import roomescape.common.exception.EntityNotFoundException;
 import roomescape.common.vo.Slot;
 import roomescape.member.Member;
 import roomescape.member.MemberDao;
-import roomescape.promotion.PromotionService;
+import roomescape.reservation.PromotionEnqueuePort;
 import roomescape.reservation.Reservation;
 import roomescape.reservation.ReservationDao;
 import roomescape.reservation.web.dto.AdminReservationRequestDto;
@@ -23,20 +23,20 @@ public class AdminReservationService {
     private final ReservationDao reservationDao;
     private final MemberDao memberDao;
     private final TimeDao timeDao;
-    private final PromotionService promotionService;
+    private final PromotionEnqueuePort promotionEnqueuePort;
     private final ReservationCreator reservationCreator;
 
     public AdminReservationService(
             ReservationDao reservationDao,
             MemberDao memberDao,
             TimeDao timeDao,
-            PromotionService promotionService,
+            PromotionEnqueuePort promotionEnqueuePort,
             ReservationCreator reservationCreator
     ) {
         this.reservationDao = reservationDao;
         this.memberDao = memberDao;
         this.timeDao = timeDao;
-        this.promotionService = promotionService;
+        this.promotionEnqueuePort = promotionEnqueuePort;
         this.reservationCreator = reservationCreator;
     }
 
@@ -74,7 +74,7 @@ public class AdminReservationService {
                 .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 시간입니다."));
         reservation.update(request.date(), time, LocalDateTime.now());
         Reservation updated = reservationDao.update(reservation);
-        promotionService.enqueuePromotion(vacatedSlot);
+        promotionEnqueuePort.enqueuePromotion(vacatedSlot);
         return updated;
     }
 
@@ -82,7 +82,7 @@ public class AdminReservationService {
         Reservation reservation = findById(id);
         reservation.cancelByAdmin(LocalDateTime.now());
         reservationDao.update(reservation);
-        promotionService.enqueuePromotion(reservation.getSlot());
+        promotionEnqueuePort.enqueuePromotion(reservation.getSlot());
     }
 
     public void delete(Long id) {

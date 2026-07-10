@@ -10,6 +10,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import roomescape.common.vo.Slot;
+import roomescape.reservation.PromotionEnqueuePort;
 import roomescape.reservation.ReservationDao;
 import roomescape.reservation.service.ReservationCreator;
 import roomescape.waiting.WaitingDao;
@@ -20,7 +21,7 @@ import roomescape.waiting.WaitingDao;
  */
 @Service
 @Transactional
-public class PromotionService {
+public class PromotionService implements PromotionEnqueuePort {
 
     private static final Logger log = LoggerFactory.getLogger(PromotionService.class);
 
@@ -44,6 +45,7 @@ public class PromotionService {
      * 취소 트랜잭션 안에서 호출된다. inline으로 승격하지 않고, "이 슬롯의 다음 대기자를 승격시켜라"라는 할 일만
      * 아웃박스에 기록한다(취소와 같은 트랜잭션 → 원자적). 실제 승격은 워커가 나중에 수행한다.
      */
+    @Override
     public void enqueuePromotion(Slot slot) {
         promotionOutboxDao.insert(PromotionTask.pending(slot));
     }
@@ -100,7 +102,7 @@ public class PromotionService {
                         return;
                     }
                     try {
-                        reservationCreator.createFromPromotion(first, now);
+                        reservationCreator.createFromPromotion(first.promote(now));
                     } catch (DuplicateKeyException e) {
                         // 그 사이 슬롯이 참(다른 워커의 승격 또는 어드민 직접 예약).
                         // 대기는 줄을 지키고 임무만 소비한다 — 다음 취소가 새 태스크를 적재하므로 잃는 것이 없다.

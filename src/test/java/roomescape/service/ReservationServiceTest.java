@@ -45,13 +45,14 @@ import roomescape.theme.dao.ThemeJdbcDao;
 import roomescape.time.Time;
 import roomescape.time.TimeDao;
 import roomescape.time.dao.TimeJdbcDao;
+import roomescape.waiting.WaitingQueryAdapter;
 import roomescape.waiting.WaitingService;
 import roomescape.waiting.dao.WaitingJdbcDao;
 
 @JdbcTest
 @Import({ReservationService.class, ReservationCreator.class, ReservationAuthorizationService.class, WaitingService.class,
         ReservationJdbcDao.class, TimeJdbcDao.class, ThemeJdbcDao.class, MemberJdbcDao.class, StoreJdbcDao.class,
-        WaitingJdbcDao.class, PromotionOutboxJdbcDao.class, PromotionService.class,
+        WaitingJdbcDao.class, WaitingQueryAdapter.class, PromotionOutboxJdbcDao.class, PromotionService.class,
         OrderJdbcDao.class, OrderService.class})
 @ActiveProfiles("test")
 class ReservationServiceTest {

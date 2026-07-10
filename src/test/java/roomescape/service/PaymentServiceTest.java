@@ -56,6 +56,7 @@ import roomescape.theme.dao.ThemeJdbcDao;
 import roomescape.time.Time;
 import roomescape.time.TimeDao;
 import roomescape.time.dao.TimeJdbcDao;
+import roomescape.waiting.WaitingQueryAdapter;
 import roomescape.waiting.dao.WaitingJdbcDao;
 
 /**
@@ -66,7 +67,7 @@ import roomescape.waiting.dao.WaitingJdbcDao;
 @Import({PaymentService.class, PaymentHistoryService.class, PaymentAbandonmentService.class, PaymentCancellationService.class, PaymentReconciliationService.class, PaymentRefundService.class, OrderService.class, ReservationService.class, ReservationCreator.class,
         ReservationAuthorizationService.class, PromotionService.class, FakePaymentGateway.class,
         ReservationJdbcDao.class, OrderJdbcDao.class, TimeJdbcDao.class, ThemeJdbcDao.class,
-        MemberJdbcDao.class, StoreJdbcDao.class, WaitingJdbcDao.class, PromotionOutboxJdbcDao.class})
+        MemberJdbcDao.class, StoreJdbcDao.class, WaitingJdbcDao.class, WaitingQueryAdapter.class, PromotionOutboxJdbcDao.class})
 @ActiveProfiles("test")
 class PaymentServiceTest {
 

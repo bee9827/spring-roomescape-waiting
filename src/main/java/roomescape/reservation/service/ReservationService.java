@@ -11,7 +11,7 @@ import roomescape.common.exception.DuplicateEntityException;
 import roomescape.common.exception.EntityNotFoundException;
 import roomescape.common.vo.Slot;
 import roomescape.member.Member;
-import roomescape.promotion.PromotionService;
+import roomescape.reservation.PromotionEnqueuePort;
 import roomescape.reservation.Reservation;
 import roomescape.reservation.ReservationDao;
 import roomescape.reservation.ReservationStatus;
@@ -25,20 +25,20 @@ import roomescape.time.TimeDao;
 public class ReservationService {
     private final ReservationDao reservationDao;
     private final TimeDao timeDao;
-    private final PromotionService promotionService;
+    private final PromotionEnqueuePort promotionEnqueuePort;
     private final ReservationAuthorizationService authorizationService;
     private final ReservationCreator reservationCreator;
 
     public ReservationService(
             ReservationDao reservationDao,
             TimeDao timeDao,
-            PromotionService promotionService,
+            PromotionEnqueuePort promotionEnqueuePort,
             ReservationAuthorizationService authorizationService,
             ReservationCreator reservationCreator
     ) {
         this.reservationDao = reservationDao;
         this.timeDao = timeDao;
-        this.promotionService = promotionService;
+        this.promotionEnqueuePort = promotionEnqueuePort;
         this.authorizationService = authorizationService;
         this.reservationCreator = reservationCreator;
     }
@@ -91,7 +91,7 @@ public class ReservationService {
                 .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 시간입니다."));
         reservation.update(request.date(), time, LocalDateTime.now());
         Reservation updated = reservationDao.update(reservation);
-        promotionService.enqueuePromotion(vacatedSlot);
+        promotionEnqueuePort.enqueuePromotion(vacatedSlot);
         return updated;
     }
 
@@ -100,7 +100,7 @@ public class ReservationService {
         Reservation reservation = findActiveById(id);
         reservation.cancelByUser(LocalDateTime.now());
         reservationDao.update(reservation);
-        promotionService.enqueuePromotion(reservation.getSlot());
+        promotionEnqueuePort.enqueuePromotion(reservation.getSlot());
     }
 
     /**
@@ -124,7 +124,7 @@ public class ReservationService {
             }
             reservation.cancelPending(LocalDateTime.now());
             reservationDao.update(reservation);
-            promotionService.enqueuePromotion(reservation.getSlot());
+            promotionEnqueuePort.enqueuePromotion(reservation.getSlot());
         });
     }
 

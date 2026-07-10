@@ -9,6 +9,7 @@ import roomescape.common.vo.Slot;
 import roomescape.member.Member;
 import roomescape.reservation.Reservation;
 import roomescape.reservation.ReservationDao;
+import roomescape.reservation.WaitingQueryPort;
 import roomescape.reservation.web.dto.AdminReservationRequestDto;
 import roomescape.reservation.web.dto.ReservationRequestDto;
 import roomescape.store.Store;
@@ -17,8 +18,6 @@ import roomescape.theme.Theme;
 import roomescape.theme.ThemeDao;
 import roomescape.time.Time;
 import roomescape.time.TimeDao;
-import roomescape.waiting.Waiting;
-import roomescape.waiting.WaitingDao;
 
 @Component
 public class ReservationCreator {
@@ -26,20 +25,20 @@ public class ReservationCreator {
     private final TimeDao timeDao;
     private final ThemeDao themeDao;
     private final StoreDao storeDao;
-    private final WaitingDao waitingDao;
+    private final WaitingQueryPort waitingQueryPort;
 
     public ReservationCreator(
             ReservationDao reservationDao,
             TimeDao timeDao,
             ThemeDao themeDao,
             StoreDao storeDao,
-            WaitingDao waitingDao
+            WaitingQueryPort waitingQueryPort
     ) {
         this.reservationDao = reservationDao;
         this.timeDao = timeDao;
         this.themeDao = themeDao;
         this.storeDao = storeDao;
-        this.waitingDao = waitingDao;
+        this.waitingQueryPort = waitingQueryPort;
     }
 
     public Reservation createByUser(Member member, ReservationRequestDto request, LocalDateTime now) {
@@ -64,11 +63,12 @@ public class ReservationCreator {
     }
 
     /**
-     * 승격 전용 생성: 대기를 PENDING 예약으로 만들어 저장한다. 유저 생성(createByUser)과 달리
+     * 승격 전용 생성: 이미 승격된(promote) 예약을 저장한다. 유저 생성(createByUser)과 달리
      * 권한·새치기(대기 큐) 검증을 거치지 않는다 — 승격은 시스템이 수행하는 완전히 다른 행동이다.
+     * Waiting→Reservation 변환(promote)은 호출자가 수행한다 — 이 클래스가 waiting을 알지 않도록.
      */
-    public Reservation createFromPromotion(Waiting waiting, LocalDateTime now) {
-        return reservationDao.insert(waiting.promote(now));
+    public Reservation createFromPromotion(Reservation promoted) {
+        return reservationDao.insert(promoted);
     }
 
     /**
@@ -85,7 +85,7 @@ public class ReservationCreator {
      * 새치기 방지: 취소 직후 슬롯이 비어 보이는 순간(아웃박스 승격 대기 중)에 다른 사용자가 대기자를 제치고 직접 예약하는 것을 막는다. 대기 행을 잠금 조회하여 워커의 승격과 직렬화한다.
      */
     private void validateNoWaitingQueue(Slot slot) {
-        if (waitingDao.existsBySlotForUpdate(slot)) {
+        if (waitingQueryPort.existsBySlotForUpdate(slot)) {
             throw new BusinessRuleViolationException("대기자가 있는 슬롯입니다. 대기 신청을 이용해주세요.");
         }
     }
